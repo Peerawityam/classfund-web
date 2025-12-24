@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -39,7 +38,7 @@ mongoose.connect(MONGODB_URI)
 
 // --- Schemas ---
 const UserSchema = new mongoose.Schema({
-  _id: { type: String }, // Explicitly allow String _id to use username as ID
+  _id: { type: String }, 
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   name: { type: String, required: true },
@@ -67,6 +66,7 @@ const ClassroomSchema = new mongoose.Schema({
   name: { type: String, default: 'ระบบเก็บ/เช็คเงิน' },
   monthlyFee: { type: Number, default: 20 },
   activePeriods: [String],
+  periodAmounts: { type: Map, of: Number }, // จุดสำคัญ: เก็บราคารอบ
   paymentQrCode: String
 }, { timestamps: true });
 
@@ -84,7 +84,6 @@ app.get('/api/init-classroom', async (req, res) => {
     }
     const adminExists = await User.findOne({ username: 'admin' });
     if (!adminExists) {
-      // Set _id same as username
       await User.create({ _id: 'admin', username: 'admin', password: '00189', name: 'ผู้ดูแลระบบ', role: 'ADMIN' });
     }
     res.json(classroom);
@@ -128,7 +127,6 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
   try {
-    // Set _id to username for identification
     const userData = { ...req.body, _id: req.body.username };
     const user = new User(userData);
     await user.save();
@@ -176,7 +174,7 @@ app.get('/api/transactions/check-slip/:hash', async (req, res) => {
   try {
     const { hash } = req.params;
     const exists = await Transaction.findOne({ slipHash: hash });
-    res.json({ isDuplicate: !!exists }); // ส่งกลับ true ถ้าเจอซ้ำ
+    res.json({ isDuplicate: !!exists });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

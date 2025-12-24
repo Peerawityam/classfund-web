@@ -155,3 +155,17 @@ export const calculateBalance = (txs: Transaction[], userId?: string): number =>
       return curr.type === TransactionType.DEPOSIT ? acc + curr.amount : acc - curr.amount;
     }, 0);
 };
+
+export const updateTransaction = async (id: string, data: any) => {
+  const response = await fetch(`${API_BASE}/transactions/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to update transaction');
+  }
+  return response.json();
+};

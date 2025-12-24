@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Transaction, TransactionType, TransactionStatus, UserRole, User, Classroom } from '../types';
 import { analyzeSlip, SlipAnalysisResult } from '../services/geminiService';
-import * as api from '../services/apiService'; // import api เพื่อใช้เช็กซ้ำ
+import * as api from '../services/apiService';
 
 interface Props {
   classroom: Classroom;
@@ -10,19 +10,32 @@ interface Props {
   currentUserName: string;
   users: User[];
   defaultValues?: Partial<Transaction>;
-  onSubmit: (tx: Transaction) => void;
+  onSubmit: (tx1: any, tx2?: any) => void;
   onCancel: () => void;
 }
 
 const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, currentUserName, users, defaultValues, onSubmit, onCancel }) => {
   const [type, setType] = useState<TransactionType>(defaultValues?.type || TransactionType.DEPOSIT);
-  const [amount, setAmount] = useState(defaultValues?.amount?.toString() || '');
   const [note, setNote] = useState(defaultValues?.note || '');
-  const [period, setPeriod] = useState(defaultValues?.period || '');
+  
+  // State
+  const [period1, setPeriod1] = useState(defaultValues?.period || '');
+  const [amount1, setAmount1] = useState(defaultValues?.amount?.toString() || '');
+  
+  const [period2, setPeriod2] = useState('');
+  const [amount2, setAmount2] = useState('');
+
+  // ยอดรวม
+  const [totalAmount, setTotalAmount] = useState(0);
+
+  // Popup States
+  const [showIntroWarning, setShowIntroWarning] = useState(true);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
   const [studentName, setStudentName] = useState(defaultValues?.studentName || currentUserName);
   const [targetUserId, setTargetUserId] = useState<string | undefined>(defaultValues?.userId || (userRole === UserRole.STUDENT ? currentUserId : undefined));
   const [slipImage, setSlipImage] = useState<string | undefined>(undefined);
-  const [slipHash, setSlipHash] = useState<string>(''); // state สำหรับเก็บ hash
+  const [slipHash, setSlipHash] = useState<string>('');
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -34,7 +47,30 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
   const isStudent = userRole === UserRole.STUDENT;
   const studentsOnly = users.filter(u => u.role === UserRole.STUDENT);
 
-  // ฟังก์ชันคำนวณ Hash ของไฟล์ (เปรียบเสมือนลายนิ้วมือของรูป)
+  // คำนวณยอดรวม
+  useEffect(() => {
+    if (isAdmin) {
+        const v1 = parseFloat(amount1) || 0;
+        const v2 = parseFloat(amount2) || 0;
+        setTotalAmount(v1 + v2);
+    } else {
+        setTotalAmount(parseFloat(amount1) || 0);
+    }
+  }, [amount1, amount2, isAdmin]);
+
+  // Auto-fill ราคา (เฉพาะ Admin และต้องเป็นตอนเลือกรายการ ไม่ใช่ตอน AI ทำงาน)
+  useEffect(() => {
+    if (isAdmin && period1 && classroom.periodAmounts?.[period1] && !amount1) {
+       setAmount1(classroom.periodAmounts[period1].toString());
+    }
+  }, [period1, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin && period2 && classroom.periodAmounts?.[period2] && !amount2) {
+       setAmount2(classroom.periodAmounts[period2].toString());
+    }
+  }, [period2, isAdmin]);
+
   const computeSHA256 = async (file: File) => {
     const buffer = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
@@ -45,37 +81,42 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // 1. คำนวณ Hash และเช็กซ้ำทันที
       const hash = await computeSHA256(file);
       setSlipHash(hash);
       
       try {
-        // เรียก API เช็กว่า Hash นี้เคยมีในระบบไหม (ต้องเพิ่ม API นี้ใน service)
         const check = await api.checkSlipDuplicate(hash); 
         if (check.isDuplicate) {
-           setError('⚠️ รูปสลิปนี้เคยถูกใช้งานในระบบแล้ว กรุณาตรวจสอบ');
-           setSlipImage(undefined); // เคลียร์รูปออก
-           if (fileInputRef.current) fileInputRef.current.value = '';
-           return; // จบการทำงาน ไม่ไปต่อ
+           setError('⚠️ รูปสลิปนี้เคยถูกใช้งานในระบบแล้ว');
+           setSlipImage(undefined);
+           return;
         }
-      } catch (err) {
-        console.warn("Skipping duplicate check due to error/offline");
-      }
+      } catch (err) {}
 
-      // 2. ถ้าไม่ซ้ำ ก็ทำงานต่อตามปกติ
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result as string;
         setSlipImage(base64);
-        setError('');
         
         if (type === TransactionType.DEPOSIT) {
             setIsAnalyzing(true);
-            setAiResult(null);
-            const result = await analyzeSlip(base64);
-            setIsAnalyzing(false);
-            setAiResult(result);
-            if (result.isValid && result.amount) setAmount(result.amount.toString());
+            setAiResult(null); // เคลียร์ค่าเก่าก่อน
+            
+            try {
+                const result = await analyzeSlip(base64);
+                
+                // --- แก้ไขตรงนี้: ถ้าเจอตัวเลข ให้ใส่เลย (ไม่ต้องเช็คว่าช่องว่างไหม) ---
+                if (result.isValid && result.amount) {
+                    console.log("AI Auto-fill Amount:", result.amount);
+                    setAmount1(result.amount.toString());
+                }
+                
+                setAiResult(result);
+            } catch (error) {
+                console.error("AI Error:", error);
+            } finally {
+                setIsAnalyzing(false);
+            }
         }
       };
       reader.readAsDataURL(file);
@@ -92,170 +133,283 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!amount || isSaving) return;
+  const handleAddNoteTag = (tag: string) => {
+      setNote(prev => {
+          if (!prev) return tag;
+          if (prev.includes(tag)) return prev;
+          return `${prev}, ${tag}`;
+      });
+  };
 
-    if (isStudent) {
-        if (!period) {
-            setError('กรุณาเลือกรอบการเก็บเงินที่คุณต้องการชำระ');
-            return;
-        }
-        if (type === TransactionType.DEPOSIT && !slipImage) {
-            setError('กรุณาแนบสลิป/หลักฐานการโอนเงิน');
-            return;
-        }
+  const handlePreSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (totalAmount <= 0) {
+        setError('ยอดเงินรวมต้องมากกว่า 0');
+        return;
+    }
+    if (isStudent && type === TransactionType.DEPOSIT && !slipImage) {
+        setError('กรุณาแนบสลิป/หลักฐานการโอนเงิน');
+        return;
+    }
+    
+    if (!isAdmin && !note.trim()) {
+        setError('กรุณาระบุหมายเหตุ (สามารถกดเลือกจากปุ่มด้านล่างได้)');
+        return;
     }
 
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     setIsSaving(true);
-    // เพิ่ม slipHash เข้าไปใน object transaction (ต้องแก้ Interface Transaction ด้วยถ้าต้องการ Type safe)
-    const newTx: any = { 
+    setShowConfirmModal(false);
+
+    const finalPeriod1 = isAdmin ? (period1 || undefined) : "รอตรวจสอบ";
+
+    const tx1: any = { 
       classroomId: classroom.id,
       type,
-      amount: parseFloat(amount),
+      amount: parseFloat(amount1) || 0,
       studentName, 
       userId: targetUserId === 'GENERAL' ? undefined : targetUserId,
       note,
-      period: period || undefined,
+      period: finalPeriod1,
       date: new Date().toISOString(),
       status: isAdmin ? TransactionStatus.APPROVED : TransactionStatus.PENDING,
       slipImage,
-      slipHash, // ส่ง hash ไปบันทึกด้วย
+      slipHash,
       approver: isAdmin ? currentUserName : undefined
     };
+
+    let tx2 = undefined;
+    if (isAdmin) {
+        const v2 = parseFloat(amount2) || 0;
+        if (period2 && v2 > 0) {
+            tx2 = { 
+                ...tx1, 
+                amount: v2, 
+                period: period2, 
+                note: note ? `${note} (2)` : '' 
+            };
+        }
+    }
     
     try {
-        await onSubmit(newTx);
+        await onSubmit(tx1, tx2);
     } catch (err: any) {
-        setError(err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่');
+        setError(err.message || 'เกิดข้อผิดพลาด');
         setIsSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up max-h-[90vh] overflow-y-auto">
-        <div className={`p-4 text-white flex justify-between items-center transition-colors duration-500 sticky top-0 z-10 ${type === TransactionType.DEPOSIT ? 'bg-emerald-600' : 'bg-rose-600'}`}>
-          <div className="flex items-center gap-2">
-            {isSaving && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
-            <h2 className="text-lg font-bold">{isSaving ? 'กำลังบันทึกข้อมูล...' : (isAdmin ? 'บันทึกรายการเงิน' : 'ชำระเงิน / แจ้งโอน')}</h2>
-          </div>
-          <button 
-            onClick={onCancel} 
-            disabled={isSaving}
-            className="text-white/70 hover:text-white hover:rotate-90 transition-all duration-200 text-3xl leading-none focus:outline-none"
-          >
-            &times;
-          </button>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* ... (ส่วนอื่นๆ เหมือนเดิม) ... */}
+    <>
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in-up max-h-[90vh] overflow-y-auto relative">
           
-          {/* ส่วนแสดง QR Code (คงเดิม) */}
-          {type === TransactionType.DEPOSIT && classroom.paymentQrCode && !isSaving && (
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 flex flex-col items-center group transition-all duration-300 hover:shadow-inner">
-               <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-2">Scan to Pay (TrueMoney/PromptPay)</p>
-               <div className="relative overflow-hidden rounded-lg shadow-sm bg-white p-2">
-                 <img src={classroom.paymentQrCode} className="w-40 h-40 object-contain transition-transform duration-500 group-hover:scale-105" alt="Payment QR" />
-               </div>
-               <p className="text-[10px] text-orange-400 mt-2">สแกนจ่ายแล้วแนบสลิปด้านล่าง</p>
-            </div>
-          )}
-
-          {/* ... (ส่วนเลือกผู้ทำรายการ / จำนวนเงิน คงเดิม) ... */}
-          {isAdmin && !isSaving && (
-            <div className="flex bg-gray-100 p-1 rounded-lg">
-              <button type="button" onClick={() => setType(TransactionType.DEPOSIT)} className={`flex-1 py-2 rounded-md text-sm font-bold transition-all duration-200 ${type === TransactionType.DEPOSIT ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-emerald-500/70'}`}>รายรับ</button>
-              <button type="button" onClick={() => setType(TransactionType.EXPENSE)} className={`flex-1 py-2 rounded-md text-sm font-bold transition-all duration-200 ${type === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-rose-500/70'}`}>รายจ่าย</button>
-            </div>
-          )}
-
-           <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">ผู้ทำรายการ</label>
-            {isAdmin ? (
-              <select required disabled={isSaving} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none bg-white text-gray-700 disabled:bg-gray-50" value={targetUserId || ''} onChange={(e) => handleStudentSelect(e.target.value)}>
-                <option value="">-- เลือกชื่อนักเรียน --</option>
-                <option value="GENERAL">ส่วนกลาง (ยอดเงินรวม)</option>
-                {studentsOnly.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
-            ) : (
-              <input disabled type="text" value={studentName} className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-500 font-medium" />
-            )}
+          <div className={`p-4 text-white flex justify-between items-center ${type === TransactionType.DEPOSIT ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+            <h2 className="text-lg font-bold">{isSaving ? 'กำลังบันทึก...' : (isAdmin ? 'บันทึกรายการเงิน' : 'ชำระเงิน / แจ้งโอน')}</h2>
+            <button onClick={onCancel} disabled={isSaving} className="text-white/70 hover:text-white text-3xl leading-none">&times;</button>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">จำนวนเงิน (฿)</label>
-              <input required disabled={isSaving} type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl font-mono text-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none disabled:bg-gray-50" placeholder="0.00" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">รอบการเก็บเงิน</label>
-              <select required={isStudent} disabled={isSaving} value={period} onChange={(e) => { setPeriod(e.target.value); setError(''); }} className={`w-full px-4 py-2.5 border rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none disabled:bg-gray-50 ${error && !period && isStudent ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-200'}`}>
-                <option value="">{isStudent ? '-- กรุณาเลือก --' : 'ไม่ระบุ'}</option>
-                {classroom.activePeriods?.map(p => (<option key={p} value={p}>{p}</option>))}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">หลักฐาน/สลิป {isStudent && type === TransactionType.DEPOSIT && <span className="text-red-500">*</span>}</label>
-            <div 
-              onClick={() => !isAnalyzing && !isSaving && fileInputRef.current?.click()} 
-              className={`group w-full h-36 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all duration-300 overflow-hidden relative ${slipImage ? 'border-emerald-200' : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/30'}`}
-            >
-              {isAnalyzing ? (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-                  <span className="text-[10px] text-emerald-600 font-bold animate-pulse">AI กำลังวิเคราะห์สลิป...</span>
+          
+          {showIntroWarning ? (
+            <div className="p-8 text-center animate-fade-in">
+                <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+                   <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                   </svg>
                 </div>
-              ) : slipImage ? (
-                <div className="relative w-full h-full">
-                  <img src={slipImage} className="h-full w-full object-contain" />
-                  {!isSaving && (
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <span className="bg-white/90 px-3 py-1.5 rounded-full text-[10px] font-bold shadow-sm">เปลี่ยนรูปภาพ</span>
-                    </div>
-                  )}
+                <h3 className="text-xl font-bold text-gray-800 mb-3">ข้อควรระวังก่อนเริ่ม!</h3>
+                <p className="text-gray-600 text-sm mb-6 leading-relaxed">
+                   กรุณาระบุยอดเงินในช่องกรอกข้อมูล<br/>
+                   ให้ <span className="text-rose-600 font-bold underline bg-rose-50 px-1 rounded">ตรงกับยอดในสลิป</span> เท่านั้น
+                </p>
+                <div className="bg-gray-50 p-4 rounded-xl text-xs text-gray-500 mb-6 text-left border border-gray-100">
+                    <ul className="list-disc pl-4 space-y-1">
+                        <li>ห้ามกรอกยอดที่หารเฉลี่ยเอง</li>
+                        <li>ระบบจะตรวจสอบยอดเงินอัตโนมัติ</li>
+                        <li>หากยอดไม่ตรง สลิปอาจถูกปฏิเสธ</li>
+                    </ul>
                 </div>
-              ) : (
-                <>
-                  <svg className="w-8 h-8 text-gray-300 mb-2 group-hover:text-indigo-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-500 uppercase tracking-widest">คลิกเพื่ออัปโหลดรูปภาพ</span>
-                </>
+                <button onClick={() => setShowIntroWarning(false)} className="w-full py-3.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95">
+                   รับทราบ / เริ่มทำรายการ
+                </button>
+            </div>
+          ) : (
+            <form onSubmit={handlePreSubmit} className="p-6 space-y-4 animate-fade-in">
+              
+              {type === TransactionType.DEPOSIT && classroom.paymentQrCode && !isSaving && (
+                <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 flex flex-col items-center">
+                   <p className="text-[10px] font-bold text-orange-600 uppercase mb-2">Scan to Pay</p>
+                   <img src={classroom.paymentQrCode} className="w-40 h-40 object-contain bg-white p-2 rounded-lg shadow-sm" alt="Payment QR" />
+                </div>
               )}
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            </div>
-            {aiResult && aiResult.isValid && (
-              <div className="mt-1 flex items-center gap-1.5 animate-fade-in">
-                <span className="text-emerald-500 text-xs">✓</span>
-                <p className="text-[10px] text-emerald-600 font-bold">AI ตรวจสอบสลิปเรียบร้อย ({aiResult.amount} ฿)</p>
+
+              {isAdmin && !isSaving && (
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button type="button" onClick={() => setType(TransactionType.DEPOSIT)} className={`flex-1 py-2 rounded-md text-sm font-bold ${type === TransactionType.DEPOSIT ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500'}`}>รายรับ</button>
+                  <button type="button" onClick={() => setType(TransactionType.EXPENSE)} className={`flex-1 py-2 rounded-md text-sm font-bold ${type === TransactionType.EXPENSE ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500'}`}>รายจ่าย</button>
+                </div>
+              )}
+
+               <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase ml-1">ผู้ทำรายการ</label>
+                {isAdmin ? (
+                  <select required disabled={isSaving} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-white" value={targetUserId || ''} onChange={(e) => handleStudentSelect(e.target.value)}>
+                    <option value="">-- เลือกชื่อนักเรียน --</option>
+                    <option value="GENERAL">ส่วนกลาง (ยอดเงินรวม)</option>
+                    {studentsOnly.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                ) : (
+                  <input disabled type="text" value={studentName} className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-600" />
+                )}
               </div>
-            )}
-          </div>
 
-          {error && (
-            <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl animate-shake">
-              <p className="text-rose-600 text-[10px] font-bold flex items-center gap-2">
-                <span className="text-xs">⚠️</span> {error}
-              </p>
-            </div>
+              {/* --- สลิป + Loading AI --- */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase ml-1">หลักฐาน/สลิป</label>
+                <div onClick={() => !isAnalyzing && !isSaving && fileInputRef.current?.click()} className={`w-full h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer relative overflow-hidden ${slipImage ? 'border-emerald-200' : 'border-gray-200 hover:border-indigo-400'} transition-all`}>
+                  
+                  {slipImage ? <img src={slipImage} className="h-full w-full object-contain" /> : <div className="text-center text-gray-400"><span className="text-3xl block mb-2">+</span><span className="text-xs">คลิกเพื่ออัปโหลด</span></div>}
+                  
+                  {isAnalyzing && (
+                      <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center z-10 animate-fade-in">
+                          <div className="w-8 h-8 border-4 border-emerald-100 border-t-emerald-500 rounded-full animate-spin mb-2"></div>
+                          <span className="text-xs font-bold text-emerald-600 animate-pulse">AI กำลังตรวจสอบยอด...</span>
+                      </div>
+                  )}
+
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                </div>
+                {aiResult && aiResult.isValid && !isAnalyzing && <p className="text-[10px] text-emerald-600 font-bold mt-1 text-center animate-fade-in-up">✓ AI ตรวจสอบยอด: {aiResult.amount} ฿</p>}
+              </div>
+
+              {/* ยอดเงิน */}
+              {isAdmin ? (
+                  <div className="space-y-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                     <div className="grid grid-cols-[1.5fr,1fr] gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase">รายการ (1)</label>
+                          <select disabled={isSaving} value={period1} onChange={(e) => setPeriod1(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="">-- เลือกรายการ --</option>
+                            {classroom.activePeriods?.map(p => (<option key={p} value={p}>{p}</option>))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase">จำนวนเงิน (1)</label>
+                          <input type="number" step="0.01" value={amount1} onChange={(e) => setAmount1(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="0.00" />
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-[1.5fr,1fr] gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase">รายการ (2)</label>
+                          <select disabled={isSaving} value={period2} onChange={(e) => setPeriod2(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="">-- เลือกรายการเสริม --</option>
+                            {classroom.activePeriods?.filter(p => p !== period1).map(p => (<option key={p} value={p}>{p}</option>))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase">จำนวนเงิน (2)</label>
+                          <input type="number" step="0.01" value={amount2} onChange={(e) => setAmount2(e.target.value)} disabled={!period2} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100" placeholder="0.00" />
+                        </div>
+                     </div>
+                  </div>
+              ) : (
+                  <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-400 uppercase ml-1">ยอดเงินที่โอน (บาท)</label>
+                      <input 
+                        type="number" 
+                        step="0.01" 
+                        value={amount1} 
+                        onChange={(e) => setAmount1(e.target.value)} 
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl text-lg font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-gray-300 transition-all" 
+                        placeholder="ระบุยอดเงินตามสลิป" 
+                      />
+                  </div>
+              )}
+
+              {isAdmin && (
+                  <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 flex justify-between items-center">
+                     <span className="text-sm font-bold text-indigo-800">ยอดรวมสุทธิ</span>
+                     <span className="text-2xl font-mono font-bold text-indigo-600">{totalAmount.toLocaleString()} ฿</span>
+                  </div>
+              )}
+
+              {error && <div className="bg-rose-50 p-3 rounded-xl"><p className="text-rose-600 text-xs font-bold">{error}</p></div>}
+
+              {/* --- หมายเหตุ & Quick Tags --- */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase ml-1">
+                    หมายเหตุ {!isAdmin && <span className="text-rose-500">*</span>}
+                </label>
+                <textarea 
+                    disabled={isSaving} 
+                    rows={2} 
+                    value={note} 
+                    onChange={(e) => setNote(e.target.value)} 
+                    className={`w-full px-4 py-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 ${!note && !isAdmin ? 'border-amber-300 ring-1 ring-amber-100' : 'border-gray-200'}`} 
+                    placeholder="เช่น ค่าเสื้อ, ค่าห้องเดือน ส.ค." 
+                />
+                
+                {!isAdmin && classroom.activePeriods && classroom.activePeriods.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                        {classroom.activePeriods.map(p => (
+                            <button
+                                type="button"
+                                key={p}
+                                onClick={() => handleAddNoteTag(p)}
+                                className="px-3 py-1 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 text-gray-600 text-xs font-medium rounded-full border border-gray-200 transition-all active:scale-95"
+                            >
+                                + {p}
+                            </button>
+                        ))}
+                    </div>
+                )}
+              </div>
+
+              <button type="submit" disabled={isAnalyzing || isSaving} className={`w-full py-4 rounded-xl font-bold text-white shadow-lg ${type === TransactionType.DEPOSIT ? 'bg-emerald-600' : 'bg-rose-600'} disabled:opacity-50`}>
+                {isSaving ? 'กำลังบันทึก...' : 'บันทึกรายการ'}
+              </button>
+            </form>
           )}
-
-          <div className="space-y-1">
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">หมายเหตุ</label>
-            <textarea disabled={isSaving} rows={2} value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none resize-none disabled:bg-gray-50" placeholder="เช่น ค่าห้องเดือน ส.ค." />
-          </div>
-
-          <button type="submit" disabled={isAnalyzing || isSaving} className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all duration-300 relative overflow-hidden group ${type === TransactionType.DEPOSIT ? 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-200' : 'bg-rose-600 hover:bg-rose-700 hover:shadow-rose-200'} ${(isAnalyzing || isSaving) ? 'opacity-50 cursor-not-allowed' : 'active:scale-[0.98] hover:-translate-y-0.5'}`}>
-            <span className="relative z-10 flex items-center justify-center gap-2">
-              {isSaving ? 'กำลังอัปโหลดและบันทึก...' : (isAdmin ? 'บันทึกรายการทันที' : 'แจ้งฝากเงิน')}
-              {!isSaving && <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>}
-            </span>
-          </button>
-        </form>
+        </div>
       </div>
-    </div>
+
+      {/* --- CONFIRM POPUP --- */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-6 z-[60] backdrop-blur-md animate-fade-in">
+           <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center animate-bounce-in">
+              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8 text-emerald-600">
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                 </svg>
+              </div>
+              
+              <h3 className="text-xl font-bold text-gray-800 mb-2">ตรวจสอบความถูกต้อง</h3>
+              <p className="text-gray-500 text-sm mb-6">คุณยืนยันที่จะบันทึกยอดเงินนี้ใช่หรือไม่?</p>
+              
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 mb-6 text-left space-y-2">
+                 <div className="flex justify-between text-sm"><span>ยอดเงิน:</span> <span className="font-bold text-emerald-600">{totalAmount.toLocaleString()} ฿</span></div>
+                 <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
+                    <span className="font-bold">หมายเหตุ:</span> {note}
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                 <button onClick={() => setShowConfirmModal(false)} className="py-3 rounded-xl font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">
+                    แก้ไข
+                 </button>
+                 <button onClick={handleConfirmSubmit} className="py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-colors">
+                    ยืนยันบันทึก
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+    </>
   );
 };
 

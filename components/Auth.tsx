@@ -30,7 +30,7 @@ const Auth: React.FC<Props> = ({ className, onLogin }) => {
           setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
         }
     } catch (e) {
-        setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+        setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์ หรือ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
     } finally {
         setLoading(false);
     }
