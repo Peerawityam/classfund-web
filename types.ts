@@ -52,7 +52,6 @@ export interface Classroom {
 }
 
 export interface AppState {
-  user: User | null;
-  isLoading: boolean;
-  error: string | null;
+  currentClassroom: Classroom | null;
+  currentUser: User | null;
 }
