@@ -50,3 +50,9 @@ export interface Classroom {
   periodAmounts?: { [key: string]: number }; // จุดสำคัญ
   paymentQrCode?: string;
 }
+
+export interface AppState {
+  user: User | null;
+  isLoading: boolean;
+  error: string | null;
+}
