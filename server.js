@@ -239,7 +239,7 @@ app.post('/api/broadcast', async (req, res) => {
   const { message } = req.body;
   
   // 👇 เอา Access Token ยาวๆ จากขั้นตอนที่ 1 มาใส่ตรงนี้
-  const CHANNEL_ACCESS_TOKEN = '6bf50dd70b518a554e5ff591fcd4e8f2'; 
+  const CHANNEL_ACCESS_TOKEN = 'fRTCRXwI40rKvkfowfXcas8MZeppFeyGQN0rGr2ECTEbamySVH6GaIpfVoOVF7cjz1eXKPTMO0HRj/4hFw77zPrlPpyim7FlI5qenlHmH+X+fcyVSQfN6W2aqc7U0arA+ppt66hDE3gN9TZPVB0fpQdB04t89/1O/w1cDnyilFU='; 
 
   try {
     const users = await User.find({ lineUserId: { $ne: null } });
@@ -275,5 +275,6 @@ app.post('/api/broadcast', async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 เซิร์ฟเวอร์รันที่พอร์ต ${PORT}`));
