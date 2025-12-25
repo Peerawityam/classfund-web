@@ -8,7 +8,7 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
   // ⚠️ ใส่ LIFF ID ของคุณตรงนี้
   const LIFF_ID = "2008777068-WJ83pSqD"; // <-- ตรวจสอบว่าใส่รหัสถูกต้องหรือยัง
 
-  const API_URL = 'https://classfund-api.onrender.com/api/update-line-id';
+  const API_URL = 'https://classfund-web.onrender.com/api/update-line-id';
 
   const saveDataToBackend = async (lineUserId: string) => {
     try {
