@@ -1,4 +1,5 @@
 
+/// <reference types="vite/client" />
 import { Classroom, Transaction, TransactionStatus, User, UserRole, TransactionType } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';

@@ -1,10 +1,12 @@
+
+/// <reference types="vite/client" />
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ✅ 1. ใช้ (import.meta as any) เพื่อแก้ปัญหาเส้นแดงใน VS Code
-const API_KEY = (import.meta as any).env.VITE_GEMINI_API_KEY;
+// รับค่า API Key ได้ทั้งชื่อเก่าและใหม่
+const API_KEY = (import.meta as any).env.VITE_GOOGLE_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY;
 
 if (!API_KEY) {
-  console.error("Missing API Key! Please check .env file");
+  console.error("❌ Missing API Key! Please check .env file");
 }
 
 const genAI = new GoogleGenerativeAI(API_KEY || "");
@@ -17,20 +19,22 @@ export interface SlipAnalysisResult {
   time: string;
   senderName: string;
   receiverName: string;
-  message?: string; // เพิ่ม message เผื่อไว้แจ้งเหตุผล
+  message?: string;
 }
 
 export const analyzeSlip = async (base64Image: string): Promise<SlipAnalysisResult> => {
   try {
-    // ตัด header ของ base64 ออก (ถ้ามี)
     const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
 
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash", // ใช้รุ่น Flash เร็วและประหยัด
-        generationConfig: {
-            responseMimeType: "application/json" // บังคับตอบเป็น JSON เท่านั้น
-        }
+    // ✅ ใช้รุ่น 2.5 ตามที่ระบุ
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash", 
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
     });
+
+    console.log("🚀 Connecting to Gemini 2.5 Flash...");
 
     const imagePart = {
       inlineData: {
@@ -39,29 +43,28 @@ export const analyzeSlip = async (base64Image: string): Promise<SlipAnalysisResu
       },
     };
 
-    // 🔥 2. Prompt แบบ Strict: สั่งให้จับผิดรูปที่ไม่ใช่สลิป
     const prompt = `
-      You are a strict bank slip verifier. Analyze this image.
+      Analyze this image to see if it is a Thai Mobile Banking Slip.
       
-      CRITICAL RULES:
-      1. This MUST be a valid "Thai Mobile Banking Slip".
-      2. It MUST contain key transaction words like "โอนเงินสำเร็จ" (Transfer Successful), "รหัสอ้างอิง" (Ref ID), "จำนวนเงิน" (Amount).
-      3. REJECT IMMEDIATELY (isValid: false) if the image is:
-         - A photo of a person, food, or general objects.
-         - A convenience store receipt (7-11, etc.).
-         - A shopping bill or invoice.
-         - A QR Code scanning screen (before transfer).
-         - A screenshot of a chat conversation.
+      Task:
+      1. Identify if this image looks like a bank transfer slip from Thailand.
+      2. Extract the transaction details.
       
-      Extraction Tasks:
-      - amount: Number only (e.g. 100.00). If not found, return 0.
-      - bank: Bank name (e.g. KBank, SCB).
-      - date: Transfer date (DD/MM/YYYY).
-      - time: Transfer time (HH:MM).
-      - senderName: Name of sender (if visible).
-      - receiverName: Name of receiver (if visible).
+      Rules for "isValid":
+      - Set "isValid": true IF you can find a "Transfer Amount" AND ("Date" OR "Ref ID").
+      - Set "isValid": false ONLY IF it is clearly NOT a slip.
+      - Note: Real slips often have background themes/cartoons. This is normal.
+      - Note: Real slips often hide parts of names with asterisks (e.g., "Mr. S***"). This is VALID.
 
-      Return JSON format:
+      Extraction Instructions:
+      - amount: Extract the numerical amount. Remove commas (e.g. 1000.00). Return 0 if not found.
+      - bank: The bank name or logo visible.
+      - date: Transfer date (DD/MM/YYYY).
+      - time: Transfer time.
+      - senderName: Sender name.
+      - receiverName: Receiver name.
+
+      Return JSON:
       {
         "isValid": boolean,
         "amount": number,
@@ -76,31 +79,43 @@ export const analyzeSlip = async (base64Image: string): Promise<SlipAnalysisResu
     const result = await model.generateContent([prompt, imagePart]);
     const response = await result.response;
     const text = response.text();
-    
-    // แปลง Text เป็น JSON
+
+    console.log("🤖 Gemini 2.5 Response:", text);
+
     const data = JSON.parse(text) as SlipAnalysisResult;
 
-    // 🛡️ 3. Double Check (กันเหนียว):
-    // ถ้า AI เผลอให้ผ่าน แต่ยอดเงินเป็น 0 หรือหาไม่เจอ -> ปรับตกทันที
+    // Logic Fallback: ช่วยดันให้ผ่านถ้าข้อมูลสำคัญครบ
+    if (!data.isValid && data.amount > 0 && (data.date || data.time)) {
+        return { ...data, isValid: true, message: "กู้คืนสลิปสำเร็จ (Override)" };
+    }
+    
+    // Logic Fallback: ถ้า AI ให้ผ่านแต่ไม่มียอดเงิน
     if (data.isValid && (!data.amount || data.amount <= 0)) {
-        console.warn("AI marked valid but amount is 0. Rejecting.");
-        return { ...data, isValid: false, message: "ไม่พบยอดเงินในสลิป" };
+        return { ...data, isValid: false, message: "AI ตรวจสลิปผ่าน แต่อ่านยอดเงินไม่ได้" };
     }
 
     return data;
 
-  } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    // ถ้า Error ให้ถือว่าไม่ผ่านไว้ก่อน
-    return { 
-        isValid: false, 
-        amount: 0, 
-        bank: "", 
-        date: "", 
-        time: "", 
-        senderName: "", 
-        receiverName: "",
-        message: "ระบบตรวจสอบขัดข้อง" 
+  } catch (error: any) {
+    console.error("❌ Gemini 2.5 Analysis Error:", error);
+    
+    let errorMessage = "เกิดข้อผิดพลาดในการเชื่อมต่อ AI";
+    
+    // ดัก Error กรณีรุ่น 2.5 ยังไม่เปิดให้ใช้ในบาง Region หรือ API Key
+    if (error.message?.includes("404")) {
+        errorMessage = "ไม่พบโมเดล 'gemini-2.5-flash' (404) - กรุณาตรวจสอบว่า API Key รองรับรุ่นนี้หรือไม่";
+    }
+    if (error.message?.includes("403")) errorMessage = "API Key ผิด หรือไม่มีสิทธิ์เข้าถึง";
+
+    return {
+      isValid: false,
+      amount: 0,
+      bank: "",
+      date: "",
+      time: "",
+      senderName: "",
+      receiverName: "",
+      message: errorMessage,
     };
   }
 };

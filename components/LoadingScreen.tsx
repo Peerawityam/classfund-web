@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import logoImage from '../ClassFundIcon.png';
 
 interface Props {
   text?: string;
@@ -11,7 +13,7 @@ const LoadingScreen: React.FC<Props> = ({ text = "กำลังเข้าส
   useEffect(() => {
     // ตั้งเวลา 3 วินาที (3000ms)
     const timer = setTimeout(() => {
-      setMessage("กำลังปลุกเซิร์ฟเวอร์ (Render)...");
+      setMessage("กำลังปลุกเซิร์ฟเวอร์ ...");
       setIsLongWait(true);
     }, 3000);
 
@@ -29,7 +31,11 @@ const LoadingScreen: React.FC<Props> = ({ text = "กำลังเข้าส
         
         {/* โลโก้เด้งดึ๋ง */}
         <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-pulse relative z-10">
-           <span className="text-3xl font-bold text-emerald-600">C</span>
+        <img 
+            src={logoImage}
+            alt="Company Logo"
+            className="w-full h-full object-contain"
+          />
         </div>
       </div>
 
@@ -39,7 +45,7 @@ const LoadingScreen: React.FC<Props> = ({ text = "กำลังเข้าส
       {/* ข้อความเสริม (จะโชว์เมื่อรอนานเกิน 3 วิ) */}
       {isLongWait && (
         <div className="text-center animate-fade-in-up px-4">
-          <p className="text-slate-400 text-sm mb-1">เนื่องจากใช้เซิร์ฟเวอร์ฟรี (Render)</p>
+          <p className="text-slate-400 text-sm mb-1">เนื่องจากเซิร์ฟเวอร์อยู่ในโหมดพักผ่อน</p>
           <p className="text-emerald-400 text-sm font-bold">อาจใช้เวลาโหลด 1-2 นาที ในครั้งแรก</p>
           <p className="text-slate-500 text-xs mt-4">กรุณาอย่าปิดหน้าต่าง...</p>
         </div>
