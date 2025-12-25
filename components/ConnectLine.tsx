@@ -5,12 +5,9 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
   const [status, setStatus] = useState("idle"); 
 
   // ⚠️ ใส่ LIFF ID ของคุณตรงนี้
-  const LIFF_ID = "2008777068-xxxxxxxxx"; // <-- ตรวจสอบว่าใส่รหัสถูกต้องหรือยัง
+  const LIFF_ID = "2008777068-WJ83pSqD"; // <-- ตรวจสอบว่าใส่รหัสถูกต้องหรือยัง
 
-  // ⚠️ เช็ค URL ของ API ให้ถูกต้อง
-  // ถ้าคุณรันบนเครื่องตัวเองใช้ localhost ได้
-  // แต่ถ้าขึ้น Vercel แล้ว ต้องเปลี่ยนตรงนี้เป็น URL ของ Server จริงที่คุณอัปโหลดไว้ (เช่น https://my-api.render.com)
-  const API_URL = 'https://classfund-web.vercel.app/'; 
+  const API_URL = 'https://classfund-web.vercel.app/api/update-line-id';
 
   const saveDataToBackend = async (lineUserId: string) => {
     try {
