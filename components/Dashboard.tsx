@@ -84,7 +84,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/broadcast', {
+      const res = await fetch('https://classfund-web.onrender.com/api/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message })
