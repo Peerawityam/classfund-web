@@ -43,7 +43,9 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   name: { type: String, required: true },
   role: { type: String, enum: ['ADMIN', 'STUDENT'], default: 'STUDENT' },
-  classroomId: { type: String, default: 'MAIN' }
+  classroomId: { type: String, default: 'MAIN' },
+
+  lineUserId: { type: String, default: null }
 }, { timestamps: true });
 
 const TransactionSchema = new mongoose.Schema({
@@ -155,6 +157,31 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
+// ✅ API สำหรับเชื่อมต่อ LINE User ID กับบัญชีผู้ใช้
+app.post('/api/update-line-id', async (req, res) => {
+  const { username, lineUserId } = req.body;
+
+  try {
+    // ค้นหา User ตาม username แล้วอัปเดต lineUserId
+    const user = await User.findOneAndUpdate(
+      { username: username }, // เงื่อนไขค้นหา
+      { lineUserId: lineUserId }, // ค่าที่จะแก้
+      { new: true } // ให้คืนค่าข้อมูลใหม่กลับมา
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งานนี้' });
+    }
+
+    console.log(`🔗 เชื่อมต่อ LINE สำเร็จ: ${username} <-> ${lineUserId}`);
+    res.json({ success: true, user });
+
+  } catch (err) {
+    console.error('Update LINE ID Error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.delete('/api/users/:id', async (req, res) => {
   try {
     await User.findByIdAndDelete(req.params.id);
@@ -208,5 +235,45 @@ app.patch('/api/transactions/:id', async (req, res) => {
   }
 });
 
+app.post('/api/broadcast', async (req, res) => {
+  const { message } = req.body;
+  
+  // 👇 เอา Access Token ยาวๆ จากขั้นตอนที่ 1 มาใส่ตรงนี้
+  const CHANNEL_ACCESS_TOKEN = '6bf50dd70b518a554e5ff591fcd4e8f2'; 
+
+  try {
+    const users = await User.find({ lineUserId: { $ne: null } });
+    const userIds = users.map(u => u.lineUserId);
+
+    if (userIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'ไม่มีผู้ใช้ที่เชื่อมต่อ LINE' });
+    }
+
+    console.log(`📢 กำลังส่งประกาศหา ${userIds.length} คน...`);
+
+    const response = await fetch('https://api.line.me/v2/bot/message/multicast', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`
+      },
+      body: JSON.stringify({
+        to: userIds,
+        messages: [{ type: 'text', text: `📢 ประกาศจาก Admin:\n${message}` }]
+      })
+    });
+
+    if (response.ok) {
+      res.json({ success: true, count: userIds.length });
+    } else {
+      console.error(await response.json());
+      res.status(500).json({ success: false, message: 'ส่งข้อความไม่ผ่าน' });
+    }
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`🚀 เซิร์ฟเวอร์รันที่พอร์ต ${PORT}`));

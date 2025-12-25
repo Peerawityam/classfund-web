@@ -5,6 +5,7 @@ import LoadingScreen from './LoadingScreen';
 import TransactionList from './TransactionList';
 import TransactionForm from './TransactionForm';
 import UserManagement from './UserManagement';
+import ConnectLine from './ConnectLine';
 import * as XLSX from 'xlsx';
 
 interface Props {
@@ -21,11 +22,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [showForm, setShowForm] = useState(false);
   const [formDefaults, setFormDefaults] = useState<Partial<Transaction> | undefined>(undefined);
   const [showUserMgmt, setShowUserMgmt] = useState(false);
-  
+
   const [newPeriodName, setNewPeriodName] = useState('');
   const [showAddPeriod, setShowAddPeriod] = useState(false);
 
-  // --- State สำหรับประกาศข่าว ---
   const [isEditingAnnounce, setIsEditingAnnounce] = useState(false);
   const [announceText, setAnnounceText] = useState('');
 
@@ -40,10 +40,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     refreshData();
   }, [user._id]);
 
-  // Sync ข้อความประกาศเมื่อข้อมูลห้องเปลี่ยน
   useEffect(() => {
     if (currentClassroom.announcement) {
-        setAnnounceText(currentClassroom.announcement);
+      setAnnounceText(currentClassroom.announcement);
     }
   }, [currentClassroom]);
 
@@ -65,40 +64,68 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-  // --- ฟังก์ชันบันทึกประกาศ ---
   const handleSaveAnnouncement = async () => {
     try {
-        await api.updateAnnouncement(currentClassroom._id, announceText); 
-        alert('บันทึกประกาศเรียบร้อย ✅');
-        setIsEditingAnnounce(false);
-        refreshData(); 
+      await api.updateAnnouncement(currentClassroom._id, announceText);
+      alert('บันทึกประกาศเรียบร้อย ✅');
+      setIsEditingAnnounce(false);
+      refreshData();
     } catch (e) {
-        alert('เกิดข้อผิดพลาดในการบันทึกประกาศ');
+      alert('เกิดข้อผิดพลาดในการบันทึกประกาศ');
+    }
+  };
+
+  // ✅ ฟังก์ชันกดปุ่มประกาศ LINE
+  const handleLineBroadcast = async () => {
+    const message = prompt("📢 พิมพ์ข้อความที่ต้องการประกาศเข้า LINE ของทุกคน:");
+    if (!message || !message.trim()) return;
+
+    if (!confirm(`ยืนยันจะส่งข้อความนี้หาทุกคน?\n\n"${message}"`)) return;
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('http://localhost:3001/api/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert(`✅ ส่งสำเร็จ! แจ้งเตือนไปยัง ${data.count} คน`);
+      } else {
+        alert(`❌ ส่งไม่สำเร็จ: ${data.message}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('เชื่อมต่อ Server ไม่ได้');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
     try {
-        await api.addTransaction(tx1);
-        if (tx2) {
-            await api.addTransaction(tx2);
-        }
-        await refreshData();
-        setShowForm(false);
-        setFormDefaults(undefined);
+      await api.addTransaction(tx1);
+      if (tx2) {
+        await api.addTransaction(tx2);
+      }
+      await refreshData();
+      setShowForm(false);
+      setFormDefaults(undefined);
     } catch (error) {
-        console.error("Error adding transaction:", error);
-        alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+      console.error("Error adding transaction:", error);
+      alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
     }
   };
 
   const getPriceFromPeriod = (pName: string) => {
-     if (currentClassroom.periodAmounts && currentClassroom.periodAmounts[pName]) {
-         return currentClassroom.periodAmounts[pName];
-     }
-     const match = pName.match(/(\d+)/); 
-     if (match) return parseInt(match[0]);
-     return 0; 
+    if (currentClassroom.periodAmounts && currentClassroom.periodAmounts[pName]) {
+      return currentClassroom.periodAmounts[pName];
+    }
+    const match = pName.match(/(\d+)/);
+    if (match) return parseInt(match[0]);
+    return 0;
   }
 
   const handleQuickPay = (student: User, period: string) => {
@@ -163,16 +190,16 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const exportToExcel = () => {
     const students = users.filter(u => u.role === UserRole.STUDENT);
     const header = ['ลำดับ', 'ชื่อ-นามสกุล', ...periods, 'ยอดรวมจ่ายจริง (บาท)'];
-    
+
     const body = students.map((u, index) => {
       let studentTotal = 0;
       const statusCols = periods.map(p => {
-        const paidTxs = transactions.filter(t => 
-          t.userId === u._id && 
-          t.period === p && 
+        const paidTxs = transactions.filter(t =>
+          t.userId === u._id &&
+          t.period === p &&
           t.status === TransactionStatus.APPROVED
         );
-        
+
         if (paidTxs.length > 0) {
           const sum = paidTxs.reduce((acc, t) => acc + t.amount, 0);
           studentTotal += sum;
@@ -204,8 +231,8 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 <th className="p-3 text-left border-b sticky left-0 bg-slate-50 z-10 min-w-[200px]">รายชื่อนักเรียน</th>
                 {periods.map(p => (
                   <th key={p} className="p-3 text-center border-b min-w-[120px] relative group">
-                      <span>{p}</span>
-                      <button onClick={(e) => { e.stopPropagation(); handleRemovePeriod(p); }} className="absolute -top-1 -right-1 hidden group-hover:flex bg-red-500 text-white w-4 h-4 rounded-full items-center justify-center text-[10px] shadow-sm z-10">&times;</button>
+                    <span>{p}</span>
+                    <button onClick={(e) => { e.stopPropagation(); handleRemovePeriod(p); }} className="absolute -top-1 -right-1 hidden group-hover:flex bg-red-500 text-white w-4 h-4 rounded-full items-center justify-center text-[10px] shadow-sm z-10">&times;</button>
                   </th>
                 ))}
               </tr>
@@ -217,15 +244,15 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                   {periods.map(p => {
                     const paidTxs = transactions.filter(t =>
                       t.userId === u._id &&
-                      t.period === p && 
+                      t.period === p &&
                       t.status === TransactionStatus.APPROVED
                     );
-                    
+
                     let cellContent = (<button onClick={() => handleQuickPay(u, p)} className="text-slate-200 hover:text-emerald-400 text-lg transition-colors">❌</button>);
-                    
+
                     if (paidTxs.length > 0) {
-                        const sum = paidTxs.reduce((acc, t) => acc + t.amount, 0);
-                        cellContent = <span className="text-emerald-600 font-bold">{sum.toLocaleString()}</span>;
+                      const sum = paidTxs.reduce((acc, t) => acc + t.amount, 0);
+                      cellContent = <span className="text-emerald-600 font-bold">{sum.toLocaleString()}</span>;
                     }
 
                     return (
@@ -275,37 +302,37 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         isAdmin={isAdmin}
         periods={periods}
         onStatusChange={async (id, status, p1, a1, p2, a2) => {
-           try {
-               await api.updateTransaction(id, { 
-                  status, 
-                  period: p1, 
-                  amount: a1,
-                  approver: user.name 
-               }); 
+          try {
+            await api.updateTransaction(id, {
+              status,
+              period: p1,
+              amount: a1,
+              approver: user.name
+            });
 
-               if (p2 && (a2 || 0) > 0) {
-                   const originalTx = transactions.find(t => t._id === id);
-                   if (originalTx) {
-                       await api.addTransaction({
-                           userId: originalTx.userId,
-                           studentName: originalTx.studentName,
-                           classroomId: currentClassroom.id, 
-                           type: originalTx.type,
-                           amount: a2,
-                           period: p2,
-                           note: originalTx.note ? `${originalTx.note} (ส่วนเพิ่ม)` : '',
-                           slipImage: originalTx.slipImage,
-                           slipHash: originalTx.slipHash,
-                           status: TransactionStatus.APPROVED,
-                           approver: user.name
-                       });
-                   }
-               }
-               await refreshData(); 
-           } catch (error) {
-               console.error("Error splitting transaction:", error);
-               alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
-           }
+            if (p2 && (a2 || 0) > 0) {
+              const originalTx = transactions.find(t => t._id === id);
+              if (originalTx) {
+                await api.addTransaction({
+                  userId: originalTx.userId,
+                  studentName: originalTx.studentName,
+                  classroomId: currentClassroom.id,
+                  type: originalTx.type,
+                  amount: a2,
+                  period: p2,
+                  note: originalTx.note ? `${originalTx.note} (ส่วนเพิ่ม)` : '',
+                  slipImage: originalTx.slipImage,
+                  slipHash: originalTx.slipHash,
+                  status: TransactionStatus.APPROVED,
+                  approver: user.name
+                });
+              }
+            }
+            await refreshData();
+          } catch (error) {
+            console.error("Error splitting transaction:", error);
+            alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+          }
         }}
         filter={tab === 'PENDING' ? 'PENDING' : 'APPROVED'}
       />
@@ -330,7 +357,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               <span className="text-sm font-bold text-white">{user.name}</span>
             </div>
             {isAdmin && (
-              <button onClick={() => setShowUserMgmt(true)} className="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500/30">👥 จัดการสมาชิก</button>
+              <button onClick={() => setShowUserMgmt(true)} className="bg-indigo-600/30 hover:bg-indigo-600 text-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border border-indigo-500/30">
+                👥 จัดการสมาชิก
+              </button>
             )}
             <button onClick={onLogout} className="text-red-400 font-bold text-sm hover:underline">ออกจากระบบ</button>
           </div>
@@ -338,75 +367,78 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       </header>
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
-        
-        {/* === 1. ส่วนประกาศข่าว (Announcement) === */}
+
+        {/* === ส่วนประกาศข่าวบนหน้าเว็บ === */}
         {(isAdmin || currentClassroom.announcement) && (
-            <div className={`mb-6 p-6 rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 ${
-                currentClassroom.announcement 
-                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent' 
-                : 'bg-white border-dashed border-gray-300'
+          <div className={`mb-6 p-6 rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 ${currentClassroom.announcement
+              ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent'
+              : 'bg-white border-dashed border-gray-300'
             }`}>
-                
-                {currentClassroom.announcement && (
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-                )}
 
-                <div className="flex justify-between items-start relative z-10">
-                    <div className="flex-1">
-                         <div className="flex items-center gap-2 mb-2">
-                            <span className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm">📢</span>
-                            <h3 className={`font-bold ${currentClassroom.announcement ? 'text-white' : 'text-gray-400'}`}>
-                                ประกาศจากผู้ดูแลระบบ
-                            </h3>
-                            {currentClassroom.announcementDate && currentClassroom.announcement && (
-                                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full text-white/90">
-                                    {new Date(currentClassroom.announcementDate).toLocaleDateString('th-TH')}
-                                </span>
-                            )}
-                         </div>
+            {currentClassroom.announcement && (
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+            )}
 
-                         {/* เนื้อหาประกาศ */}
-                         {isEditingAnnounce ? (
-                             <div className="mt-2 animate-fade-in">
-                                 <textarea 
-                                    className="w-full p-3 rounded-xl text-gray-800 text-sm border-2 border-indigo-200 focus:ring-2 focus:ring-indigo-400 outline-none resize-none"
-                                    rows={3}
-                                    placeholder="พิมพ์ข้อความประกาศ..."
-                                    value={announceText}
-                                    onChange={(e) => setAnnounceText(e.target.value)}
-                                    autoFocus
-                                 />
-                                 <div className="flex gap-2 mt-2 justify-end">
-                                     <button onClick={() => setIsEditingAnnounce(false)} className="text-xs text-white/80 hover:text-white px-3 py-2">ยกเลิก</button>
-                                     <button onClick={handleSaveAnnouncement} className="bg-white text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-lg">บันทึก</button>
-                                 </div>
-                             </div>
-                         ) : (
-                             <p className={`text-sm leading-relaxed whitespace-pre-line ${currentClassroom.announcement ? 'text-white/95' : 'text-gray-400 italic'}`}>
-                                 {currentClassroom.announcement || "ยังไม่มีประกาศใหม่ (กดปุ่มแก้ไขเพื่อเพิ่มประกาศ)"}
-                             </p>
-                         )}
-                    </div>
-
-                    {/* ปุ่มแก้ไข (เฉพาะ Admin) */}
-                    {isAdmin && !isEditingAnnounce && (
-                        <button 
-                            onClick={() => setIsEditingAnnounce(true)}
-                            className={`ml-4 p-2 rounded-xl transition-all ${
-                                currentClassroom.announcement 
-                                ? 'bg-white/20 hover:bg-white/30 text-white' 
-                                : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
-                            }`}
-                            title="แก้ไขประกาศ"
-                        >
-                            ✏️
-                        </button>
-                    )}
+            <div className="flex justify-between items-start relative z-10">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm">📢</span>
+                  <h3 className={`font-bold ${currentClassroom.announcement ? 'text-white' : 'text-gray-400'}`}>
+                    ประกาศจากผู้ดูแลระบบ
+                  </h3>
+                  {currentClassroom.announcementDate && currentClassroom.announcement && (
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full text-white/90">
+                      {new Date(currentClassroom.announcementDate).toLocaleDateString('th-TH')}
+                    </span>
+                  )}
                 </div>
-            </div>
-        )}
 
-        {/* --- (เอาส่วนเชื่อมต่อ LINE ออกแล้ว) --- */}
+                {isEditingAnnounce ? (
+                  <div className="mt-2 animate-fade-in">
+                    <textarea
+                      className="w-full p-3 rounded-xl text-gray-800 text-sm border-2 border-indigo-200 focus:ring-2 focus:ring-indigo-400 outline-none resize-none"
+                      rows={3}
+                      placeholder="พิมพ์ข้อความประกาศ..."
+                      value={announceText}
+                      onChange={(e) => setAnnounceText(e.target.value)}
+                      autoFocus
+                    />
+                    <div className="flex gap-2 mt-2 justify-end">
+                      <button onClick={() => setIsEditingAnnounce(false)} className="text-xs text-white/80 hover:text-white px-3 py-2">ยกเลิก</button>
+                      <button onClick={handleSaveAnnouncement} className="bg-white text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-lg">บันทึก</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className={`text-sm leading-relaxed whitespace-pre-line ${currentClassroom.announcement ? 'text-white/95' : 'text-gray-400 italic'}`}>
+                    {currentClassroom.announcement || "ยังไม่มีประกาศใหม่ (กดปุ่มแก้ไขเพื่อเพิ่มประกาศ)"}
+                  </p>
+                )}
+              </div>
+
+              {isAdmin && !isEditingAnnounce && (
+                <div className="flex flex-col gap-2 ml-4">
+                  {/* ปุ่มประกาศ LINE */}
+                  <button
+                    onClick={handleLineBroadcast}
+                    className="bg-[#06C755] hover:bg-[#05b34c] text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-[#06C755]/20 border border-transparent"
+                    title="ส่งข้อความเข้า LINE"
+                  >
+                    ประกาศ LINE
+                  </button>
+
+                  {/* ปุ่มแก้ไข */}
+                  <button
+                    onClick={() => setIsEditingAnnounce(true)}
+                    className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl transition-all flex items-center justify-center backdrop-blur-md border border-white/20"
+                    title="แก้ไขประกาศบนเว็บ"
+                  >
+                    ประกาศบนเว็บ
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -475,7 +507,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           </div>
 
           <div className="p-4 overflow-x-auto">
-             {renderContent()}
+            {renderContent()}
           </div>
         </div>
       </div>
@@ -485,7 +517,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-fade-in-up">
             <h3 className="font-bold text-lg mb-4">เพิ่มรอบการเก็บเงินใหม่</h3>
             <div className="space-y-3 mb-6">
-                <input autoFocus type="text" value={newPeriodName} onChange={(e) => setNewPeriodName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ชื่อรายการ (เช่น ค่าเสื้อ)..." />
+              <input autoFocus type="text" value={newPeriodName} onChange={(e) => setNewPeriodName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="ชื่อรายการ (เช่น ค่าเสื้อ)..." />
             </div>
             <div className="flex gap-3"><button onClick={() => setShowAddPeriod(false)} className="flex-1 py-3 text-gray-500 font-bold">ยกเลิก</button><button onClick={handleAddPeriod} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all">บันทึก</button></div>
           </div>
@@ -505,6 +537,14 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         />
       )}
       {showUserMgmt && <UserManagement onClose={() => { setShowUserMgmt(false); refreshData(); }} />}
+
+      {user && !isAdmin && !(user as any).lineUserId && (
+        <ConnectLine
+          currentUser={user}
+          onLinkSuccess={() => window.location.reload()}
+        />
+      )}
+
     </div>
   );
 };
