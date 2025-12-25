@@ -64,6 +64,8 @@ const TransactionSchema = new mongoose.Schema({
 const ClassroomSchema = new mongoose.Schema({
   id: { type: String, default: 'MAIN' },
   name: { type: String, default: 'ระบบเก็บ/เช็คเงิน' },
+  announcement: { type: String, default: "" },
+  announcementDate: { type: Date, default: Date.now },
   monthlyFee: { type: Number, default: 20 },
   activePeriods: [String],
   periodAmounts: { type: Map, of: Number }, // จุดสำคัญ: เก็บราคารอบ
@@ -102,6 +104,23 @@ app.patch('/api/classroom', async (req, res) => {
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+app.put('/api/classroom/announcement', async (req, res) => {
+  const { classroomId, text } = req.body;
+  try {
+    const updated = await Classroom.findByIdAndUpdate(
+      classroomId, 
+      { 
+        announcement: text, 
+        announcementDate: new Date() 
+      }, 
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

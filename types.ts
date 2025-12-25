@@ -49,6 +49,8 @@ export interface Classroom {
   activePeriods?: string[];
   periodAmounts?: { [key: string]: number }; // จุดสำคัญ
   paymentQrCode?: string;
+  announcement?: string;
+  announcementDate?: string;
 }
 
 export interface AppState {

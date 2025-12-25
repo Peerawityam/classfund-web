@@ -169,3 +169,17 @@ export const updateTransaction = async (id: string, data: any) => {
   }
   return response.json();
 };
+
+export const updateAnnouncement = async (classroomId: string, text: string) => {
+  const response = await fetch(`${API_BASE}/classroom/announcement`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ classroomId, text }),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to update announcement');
+  }
+
+  return response.json();
+};

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Classroom, Transaction, TransactionStatus, User, UserRole, TransactionType } from '../types';
 import * as api from '../services/apiService';
-import LoadingScreen from './LoadingScreen'; // ✅ 1. นำเข้า (มีอยู่แล้ว)
+import LoadingScreen from './LoadingScreen';
 import TransactionList from './TransactionList';
 import TransactionForm from './TransactionForm';
 import UserManagement from './UserManagement';
@@ -25,6 +25,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [newPeriodName, setNewPeriodName] = useState('');
   const [showAddPeriod, setShowAddPeriod] = useState(false);
 
+  // --- State สำหรับประกาศข่าว ---
+  const [isEditingAnnounce, setIsEditingAnnounce] = useState(false);
+  const [announceText, setAnnounceText] = useState('');
+
   const [tab, setTab] = useState<'PENDING' | 'HISTORY' | 'INDIVIDUAL' | 'MONTHLY'>('PENDING');
   const [isLoading, setIsLoading] = useState(false);
   const qrInputRef = useRef<HTMLInputElement>(null);
@@ -35,6 +39,13 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   useEffect(() => {
     refreshData();
   }, [user._id]);
+
+  // Sync ข้อความประกาศเมื่อข้อมูลห้องเปลี่ยน
+  useEffect(() => {
+    if (currentClassroom.announcement) {
+        setAnnounceText(currentClassroom.announcement);
+    }
+  }, [currentClassroom]);
 
   const refreshData = async () => {
     setIsLoading(true);
@@ -54,9 +65,20 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
+  // --- ฟังก์ชันบันทึกประกาศ ---
+  const handleSaveAnnouncement = async () => {
+    try {
+        await api.updateAnnouncement(currentClassroom._id, announceText); 
+        alert('บันทึกประกาศเรียบร้อย ✅');
+        setIsEditingAnnounce(false);
+        refreshData(); 
+    } catch (e) {
+        alert('เกิดข้อผิดพลาดในการบันทึกประกาศ');
+    }
+  };
+
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
     try {
-        console.log("Saving transactions:", tx1, tx2);
         await api.addTransaction(tx1);
         if (tx2) {
             await api.addTransaction(tx2);
@@ -290,7 +312,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     );
   };
 
-  // --- ✅ 2. เพิ่มส่วนแสดงผล LoadingScreen ตรงนี้ครับ ---
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -317,6 +338,76 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       </header>
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
+        
+        {/* === 1. ส่วนประกาศข่าว (Announcement) === */}
+        {(isAdmin || currentClassroom.announcement) && (
+            <div className={`mb-6 p-6 rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 ${
+                currentClassroom.announcement 
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent' 
+                : 'bg-white border-dashed border-gray-300'
+            }`}>
+                
+                {currentClassroom.announcement && (
+                    <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+                )}
+
+                <div className="flex justify-between items-start relative z-10">
+                    <div className="flex-1">
+                         <div className="flex items-center gap-2 mb-2">
+                            <span className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm">📢</span>
+                            <h3 className={`font-bold ${currentClassroom.announcement ? 'text-white' : 'text-gray-400'}`}>
+                                ประกาศจากผู้ดูแลระบบ
+                            </h3>
+                            {currentClassroom.announcementDate && currentClassroom.announcement && (
+                                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full text-white/90">
+                                    {new Date(currentClassroom.announcementDate).toLocaleDateString('th-TH')}
+                                </span>
+                            )}
+                         </div>
+
+                         {/* เนื้อหาประกาศ */}
+                         {isEditingAnnounce ? (
+                             <div className="mt-2 animate-fade-in">
+                                 <textarea 
+                                    className="w-full p-3 rounded-xl text-gray-800 text-sm border-2 border-indigo-200 focus:ring-2 focus:ring-indigo-400 outline-none resize-none"
+                                    rows={3}
+                                    placeholder="พิมพ์ข้อความประกาศ..."
+                                    value={announceText}
+                                    onChange={(e) => setAnnounceText(e.target.value)}
+                                    autoFocus
+                                 />
+                                 <div className="flex gap-2 mt-2 justify-end">
+                                     <button onClick={() => setIsEditingAnnounce(false)} className="text-xs text-white/80 hover:text-white px-3 py-2">ยกเลิก</button>
+                                     <button onClick={handleSaveAnnouncement} className="bg-white text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-lg">บันทึก</button>
+                                 </div>
+                             </div>
+                         ) : (
+                             <p className={`text-sm leading-relaxed whitespace-pre-line ${currentClassroom.announcement ? 'text-white/95' : 'text-gray-400 italic'}`}>
+                                 {currentClassroom.announcement || "ยังไม่มีประกาศใหม่ (กดปุ่มแก้ไขเพื่อเพิ่มประกาศ)"}
+                             </p>
+                         )}
+                    </div>
+
+                    {/* ปุ่มแก้ไข (เฉพาะ Admin) */}
+                    {isAdmin && !isEditingAnnounce && (
+                        <button 
+                            onClick={() => setIsEditingAnnounce(true)}
+                            className={`ml-4 p-2 rounded-xl transition-all ${
+                                currentClassroom.announcement 
+                                ? 'bg-white/20 hover:bg-white/30 text-white' 
+                                : 'bg-gray-100 hover:bg-gray-200 text-gray-500'
+                            }`}
+                            title="แก้ไขประกาศ"
+                        >
+                            ✏️
+                        </button>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* --- (เอาส่วนเชื่อมต่อ LINE ออกแล้ว) --- */}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <p className="text-gray-500 text-xs uppercase tracking-wider mb-1">ยอดเงินรวมในระบบ</p>
