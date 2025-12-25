@@ -1,32 +1,22 @@
-
 import React, { useEffect, useState } from 'react';
 import liff from '@line/liff';
 
 const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
-  // ประกาศตัวแปร status (idle, loading, success, error)
   const [status, setStatus] = useState("idle"); 
 
-  // 1. ⚠️ ใส่ LIFF ID ของคุณตรงนี้
-  const LIFF_ID = "2008777068-WJ83pSqD"; 
+  // ⚠️ ใส่ LIFF ID ของคุณตรงนี้
+  const LIFF_ID = "2008777068-xxxxxxxxx"; // <-- ตรวจสอบว่าใส่รหัสถูกต้องหรือยัง
 
-  const handleLinkLine = async () => {
+  // ⚠️ เช็ค URL ของ API ให้ถูกต้อง
+  // ถ้าคุณรันบนเครื่องตัวเองใช้ localhost ได้
+  // แต่ถ้าขึ้น Vercel แล้ว ต้องเปลี่ยนตรงนี้เป็น URL ของ Server จริงที่คุณอัปโหลดไว้ (เช่น https://my-api.render.com)
+  const API_URL = 'https://classfund-web.vercel.app/'; 
+
+  const saveDataToBackend = async (lineUserId: string) => {
     try {
-      // ✅ แก้จาก setLoading(true) เป็น setStatus("loading") แล้ว
-      setStatus("loading"); 
+      console.log("กำลังบันทึก LINE ID:", lineUserId);
       
-      await liff.init({ liffId: LIFF_ID });
-
-      if (!liff.isLoggedIn()) {
-        liff.login(); 
-        return; 
-      }
-
-      const profile = await liff.getProfile();
-      const lineUserId = profile.userId; 
-      
-      console.log("ได้ User ID แล้ว:", lineUserId);
-
-      const response = await fetch('http://localhost:3001/api/update-line-id', {
+      const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -37,25 +27,52 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
 
       if (response.ok) {
         setStatus("success");
+        alert("✅ เชื่อมต่อ LINE สำเร็จ!");
         if (onLinkSuccess) onLinkSuccess(); 
-        alert("เชื่อมต่อ LINE เรียบร้อย! คุณจะได้รับการแจ้งเตือนแล้ว");
       } else {
+        const errData = await response.json();
+        console.error("Save Error:", errData);
+        alert(`❌ บันทึกไม่สำเร็จ: ${errData.message || 'Server Error'}`);
         setStatus("error");
-        alert("บันทึกข้อมูลไม่สำเร็จ");
       }
-
     } catch (err) {
-      console.error("LIFF Error:", err);
+      console.error("Fetch Error:", err);
+      alert("❌ เชื่อมต่อ Server ไม่ได้ (ถ้าอยู่บน Vercel อย่าลืมเช็คว่า Backend ออนไลน์อยู่ไหม)");
       setStatus("error");
     }
   };
 
+  const handleLinkLine = async () => {
+    try {
+      setStatus("loading");
+      await liff.init({ liffId: LIFF_ID });
+
+      if (!liff.isLoggedIn()) {
+        liff.login(); 
+        return; 
+      }
+
+      // ถ้าล็อกอินแล้ว ดึง ID มาบันทึกเลย
+      const profile = await liff.getProfile();
+      await saveDataToBackend(profile.userId);
+
+    } catch (err) {
+      console.error("LIFF Error:", err);
+      alert("เกิดข้อผิดพลาดของ LINE LIFF: " + err);
+      setStatus("error");
+    }
+  };
+
+  // ตรวจสอบสถานะตอนโหลดหน้า (Auto Check)
   useEffect(() => {
     const autoCheck = async () => {
       try {
         await liff.init({ liffId: LIFF_ID });
+        // ถ้ากลับมาจากการล็อกอินแล้ว ให้บันทึกเลย ไม่ต้องรอกดปุ่ม
         if (liff.isLoggedIn()) {
-           // ถ้าล็อกอินค้างไว้แล้ว (เช่น redirect กลับมา) ให้ user กดปุ่มเองเพื่อยืนยัน
+           setStatus("loading");
+           const profile = await liff.getProfile();
+           await saveDataToBackend(profile.userId);
         }
       } catch (e) {
         console.error(e);
@@ -80,7 +97,7 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
           className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
         >
           {status === "loading" ? (
-             <span>กำลังเชื่อมต่อ...</span>
+             <span>⏳ กำลังบันทึกข้อมูล...</span>
           ) : (
              <>
                 <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
@@ -95,7 +112,7 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
           onClick={() => setStatus("success")} 
           className="mt-4 text-gray-400 text-sm hover:text-gray-600 underline"
         >
-          ข้ามไปก่อน
+          ไว้ทีหลัง
         </button>
       </div>
     </div>
