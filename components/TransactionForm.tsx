@@ -78,9 +78,11 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
+  // 🔥 แก้ไข Logic ตรงนี้เพื่อบล็อกรูปมั่ว
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // 1. เช็คสลิปซ้ำ (Duplicate Check)
       const hash = await computeSHA256(file);
       setSlipHash(hash);
       
@@ -89,6 +91,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
         if (check.isDuplicate) {
            setError('⚠️ รูปสลิปนี้เคยถูกใช้งานในระบบแล้ว');
            setSlipImage(undefined);
+           if (fileInputRef.current) fileInputRef.current.value = '';
            return;
         }
       } catch (err) {}
@@ -96,27 +99,42 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result as string;
-        setSlipImage(base64);
         
-        if (type === TransactionType.DEPOSIT) {
-            setIsAnalyzing(true);
-            setAiResult(null); // เคลียร์ค่าเก่าก่อน
+        // ถ้าเป็น Admin จ่ายออก (Expense) ไม่ต้องตรวจ
+        if (type === TransactionType.EXPENSE) {
+            setSlipImage(base64);
+            return;
+        }
+        
+        // ถ้าเป็น Deposit -> เริ่มตรวจ AI
+        setIsAnalyzing(true);
+        setAiResult(null);
             
-            try {
-                const result = await analyzeSlip(base64);
-                
-                // --- แก้ไขตรงนี้: ถ้าเจอตัวเลข ให้ใส่เลย (ไม่ต้องเช็คว่าช่องว่างไหม) ---
-                if (result.isValid && result.amount) {
-                    console.log("AI Auto-fill Amount:", result.amount);
+        try {
+            const result = await analyzeSlip(base64);
+            
+            if (result.isValid) {
+                // ✅ ผ่าน: ให้โชว์รูปและเติมเงิน
+                setSlipImage(base64);
+                if (result.amount) {
                     setAmount1(result.amount.toString());
                 }
-                
                 setAiResult(result);
-            } catch (error) {
-                console.error("AI Error:", error);
-            } finally {
-                setIsAnalyzing(false);
+                setError('');
+            } else {
+                // ❌ ไม่ผ่าน: บล็อกทันที!
+                alert(`⛔️ ไม่สามารถใช้รูปนี้ได้\n\nเหตุผล: ${result.message || "ไม่ใช่สลิปโอนเงิน หรือข้อมูลไม่ชัดเจน"}`);
+                setSlipImage(undefined); // ล้างรูปออก
+                setSlipHash('');
+                if (fileInputRef.current) fileInputRef.current.value = ''; // ล้าง input file
             }
+        } catch (error) {
+            console.error("AI Error:", error);
+            // กรณี AI พัง (Network Error) ให้แจ้งเตือน แต่ยอมให้แนบ (Fail-safe)
+            alert("ระบบ AI ขัดข้องชั่วคราว (คุณสามารถกรอกยอดเงินเองได้)");
+            setSlipImage(base64);
+        } finally {
+            setIsAnalyzing(false);
         }
       };
       reader.readAsDataURL(file);
@@ -149,8 +167,9 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
         setError('ยอดเงินรวมต้องมากกว่า 0');
         return;
     }
+    // ถ้าไม่มีรูป (เพราะโดน AI ดีดออกไปแล้ว) จะติดตรงนี้
     if (isStudent && type === TransactionType.DEPOSIT && !slipImage) {
-        setError('กรุณาแนบสลิป/หลักฐานการโอนเงิน');
+        setError('กรุณาแนบสลิป/หลักฐานการโอนเงินที่ถูกต้อง');
         return;
     }
     
@@ -230,7 +249,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                     <ul className="list-disc pl-4 space-y-1">
                         <li>ห้ามกรอกยอดที่หารเฉลี่ยเอง</li>
                         <li>ระบบจะตรวจสอบยอดเงินอัตโนมัติ</li>
-                        <li>หากยอดไม่ตรง สลิปอาจถูกปฏิเสธ</li>
+                        <li>หากยอดไม่ตรง หรือไม่ใช่สลิปโอนเงิน ระบบจะปฏิเสธ</li>
                     </ul>
                 </div>
                 <button onClick={() => setShowIntroWarning(false)} className="w-full py-3.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95">
