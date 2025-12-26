@@ -110,7 +110,6 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
           onClick={() => setStatus("success")} 
           className="mt-4 text-gray-400 text-sm hover:text-gray-600 underline"
         >
-          ไว้ทีหลัง
         </button>
       </div>
     </div>
