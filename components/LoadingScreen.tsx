@@ -22,19 +22,19 @@ const LoadingScreen: React.FC<Props> = ({ text = "กำลังเข้าส
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-sm transition-all duration-500 text-white font-sarabun">
-      
+
       {/* Container Animation */}
       <div className="relative flex items-center justify-center mb-8">
         {/* วงกลมหมุนๆ */}
         <div className="absolute w-28 h-28 border-4 border-emerald-500/20 rounded-full"></div>
         <div className="absolute w-28 h-28 border-4 border-t-emerald-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-        
+
         {/* โลโก้เด้งดึ๋ง */}
-        <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-pulse relative z-10">
-        <img 
+        <div className="w-20 h-20 bg-white rounded-full overflow-hidden flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.4)] animate-pulse relative z-10">
+          <img
             src={logoImage}
             alt="Company Logo"
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain" 
           />
         </div>
       </div>

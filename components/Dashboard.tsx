@@ -29,11 +29,13 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [isEditingAnnounce, setIsEditingAnnounce] = useState(false);
   const [announceText, setAnnounceText] = useState('');
 
+  // เพิ่ม TAB 'ALL' หรือปรับ Logic ให้เข้าใจตรงกัน
   const [tab, setTab] = useState<'PENDING' | 'HISTORY' | 'INDIVIDUAL' | 'MONTHLY'>('PENDING');
   const [isLoading, setIsLoading] = useState(false);
   const qrInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user.role === UserRole.ADMIN;
+  // ✅ ดึงข้อมูลรอบจาก Classroom มาเก็บไว้ในตัวแปรนี้ (ถูกต้องแล้ว)
   const periods = currentClassroom.activePeriods || [];
 
   useEffect(() => {
@@ -51,7 +53,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     try {
       const allTxs = await api.getTransactions();
       const allUsers = await api.getUsers();
+      // โหลดข้อมูลห้องเรียนล่าสุด (เพื่อให้ได้ activePeriods ล่าสุดเสมอ)
       const room = await api.initClassroom();
+      
       setCurrentClassroom(room);
       setUsers(allUsers);
       const relevantTxs = isAdmin ? allTxs : allTxs.filter(tx => tx.userId === user._id);
@@ -75,7 +79,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-  // ✅ ฟังก์ชันกดปุ่มประกาศ LINE
   const handleLineBroadcast = async () => {
     const message = prompt("📢 พิมพ์ข้อความที่ต้องการประกาศเข้า LINE ของทุกคน:");
     if (!message || !message.trim()) return;
@@ -300,9 +303,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       <TransactionList
         transactions={transactions}
         isAdmin={isAdmin}
-        periods={periods}
+        periods={periods} // ✅ ส่งรายชื่อรอบไปให้ Dropdown แล้ว
         onStatusChange={async (id, status, p1, a1, p2, a2) => {
           try {
+            // อัปเดต Transaction หลัก
             await api.updateTransaction(id, {
               status,
               period: p1,
@@ -310,6 +314,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               approver: user.name
             });
 
+            // ถ้ามีการแยกยอด (มี p2 และยอดเงิน > 0) ให้สร้าง Transaction ใหม่
             if (p2 && (a2 || 0) > 0) {
               const originalTx = transactions.find(t => t._id === id);
               if (originalTx) {
@@ -334,7 +339,8 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
             alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล");
           }
         }}
-        filter={tab === 'PENDING' ? 'PENDING' : 'APPROVED'}
+        // ✅ เปลี่ยนจาก APPROVED เป็น ALL เพื่อให้แสดงประวัติทั้งหมด (รวม Rejected)
+        filter={tab === 'PENDING' ? 'PENDING' : 'ALL'} 
       />
     );
   };
@@ -368,7 +374,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-8">
 
-        {/* === ส่วนประกาศข่าวบนหน้าเว็บ === */}
         {(isAdmin || currentClassroom.announcement) && (
           <div className={`mb-6 p-6 rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 ${currentClassroom.announcement
               ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent'
@@ -417,7 +422,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
               {isAdmin && !isEditingAnnounce && (
                 <div className="flex flex-col gap-2 ml-4">
-                  {/* ปุ่มประกาศ LINE */}
                   <button
                     onClick={handleLineBroadcast}
                     className="bg-[#06C755] hover:bg-[#05b34c] text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-[#06C755]/20 border border-transparent"
@@ -426,7 +430,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                     ประกาศ LINE
                   </button>
 
-                  {/* ปุ่มแก้ไข */}
                   <button
                     onClick={() => setIsEditingAnnounce(true)}
                     className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl transition-all flex items-center justify-center backdrop-blur-md border border-white/20"
