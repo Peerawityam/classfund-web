@@ -99,7 +99,6 @@ function App() {
       clearTimeout(logoutTimer);
       logoutTimer = setTimeout(() => {
         console.log("Session Timeout");
-        alert("หมดเวลาการใช้งานเพื่อความปลอดภัย กรุณาเข้าสู่ระบบใหม่"); 
         handleLogout(); // เรียกใช้ฟังก์ชัน Logout เดียวกันกับข้างบน
       }, TIMEOUT_DURATION);
     };
