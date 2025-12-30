@@ -87,6 +87,36 @@ function App() {
     setAppState(prev => ({ ...prev, currentUser: null }));
   };
 
+  useEffect(() => {
+    // ตั้งเวลา 5 นาที (หน่วยมิลลิวินาที: 5 * 60 * 1000)
+    const TIMEOUT_DURATION = 5 * 60 * 1000; 
+    let logoutTimer: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      // ถ้าไม่ได้ Login อยู่ ไม่ต้องทำอะไร
+      if (!appState.currentUser) return;
+
+      clearTimeout(logoutTimer);
+      logoutTimer = setTimeout(() => {
+        console.log("Session Timeout");
+        alert("หมดเวลาการใช้งานเพื่อความปลอดภัย กรุณาเข้าสู่ระบบใหม่"); 
+        handleLogout(); // เรียกใช้ฟังก์ชัน Logout เดียวกันกับข้างบน
+      }, TIMEOUT_DURATION);
+    };
+
+    if (appState.currentUser) {
+        resetTimer();
+        
+        const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+        events.forEach(event => window.addEventListener(event, resetTimer));
+
+        return () => {
+            clearTimeout(logoutTimer);
+            events.forEach(event => window.removeEventListener(event, resetTimer));
+        };
+    }
+  }, [appState.currentUser]); // ทำงานใหม่ทุกครั้งที่สถานะ currentUser เปลี่ยน
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>;
 
   if (appState.currentClassroom && appState.currentUser) {
