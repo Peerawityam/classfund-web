@@ -21,7 +21,7 @@ const LoadingScreen: React.FC<Props> = ({ text = "กำลังเข้าส
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-sm transition-all duration-500 text-white font-sarabun">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-sm transition-all duration-500 text-white font-sarabun">
 
       {/* Container Animation */}
       <div className="relative flex items-center justify-center mb-8">
