@@ -11,9 +11,9 @@ import Navigation from './Navigation';
 import * as XLSX from 'xlsx';
 import { Camera, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert, CloudUpload } from 'lucide-react'; 
 
-// 🔥🔥🔥 ตั้งค่า Cloudinary 🔥🔥🔥
-const CLOUDINARY_CLOUD_NAME = "dwa29sfdw";
-const CLOUDINARY_UPLOAD_PRESET = "ClassFund";
+// 🔥 Config ถูกต้องตามรูปภาพของคุณ
+const CLOUDINARY_CLOUD_NAME = "dfztd6dye";
+const CLOUDINARY_UPLOAD_PRESET = "classfund_preset";
 
 interface Props {
   classroom: Classroom;
@@ -100,7 +100,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
      setIsLoading(true); try { await fetch('https://classfund-web.onrender.com/api/broadcast', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message})}); alert('ส่งสำเร็จ'); } catch(e){ alert('Error'); } finally { setIsLoading(false); }
   };
 
-  // ✅ แก้ไข: ปิดหน้าต่างทันทีที่บันทึกเสร็จ (แก้ปัญหาค้าง)
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
     try { 
       // 1. บันทึกรายการแรก
@@ -148,6 +147,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
+  // ✅ แก้ไข: เพิ่มการเช็ค res.ok เพื่อให้จับ Error Cloudinary ได้แม่นยำขึ้น
   const uploadToCloudinary = async (file: File): Promise<string | null> => {
       const formData = new FormData();
       formData.append("file", file);
@@ -156,6 +156,12 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
               method: "POST", body: formData
           });
+          
+          if (!res.ok) {
+             const errorText = await res.text();
+             throw new Error(`Cloudinary Error (${res.status}): ${errorText}`);
+          }
+
           const data = await res.json();
           return data.secure_url;
       } catch (error) {
@@ -164,7 +170,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       }
   };
 
-  // 🔥🔥🔥 Logic: เลือกสลิป -> AI ตรวจ -> Cloudinary Upload 🔥🔥🔥
+  // 🔥🔥🔥 Logic แก้ไขใหม่: Fail-Safe (AI พัง ก็ยังอัปโหลดรูปได้) 🔥🔥🔥
   const handleSlipSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -172,7 +178,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       
       setIsAnalyzing(true);
       setUploadProgress(10);
-      setAiMessage("AI กำลังตรวจ + อัปโหลดรูป...");
+      setAiMessage("กำลังอัปโหลดรูป...");
       setAiStatus('idle');
       setPaySlip(null);
 
@@ -191,40 +197,52 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           setPaySlipHash(hash);
       } catch (err) { console.warn("Skip duplicate check"); }
 
-      // 2. อ่านไฟล์และส่งให้ AI + Cloudinary
       const reader = new FileReader();
       reader.onloadend = async () => { 
           const base64 = reader.result as string;
           try {
-              // ทำงานคู่ขนานเพื่อความเร็ว
-              const [aiResult, cloudinaryUrl] = await Promise.all([
-                  analyzeSlip(base64),
-                  uploadToCloudinary(file)
-              ]);
+              // ✅ Step 1: อัปโหลดรูปก่อนเลย (สำคัญที่สุด)
+              // แยกออกมาจาก Promise.all เพื่อไม่ให้ AI Error มาขัดขวางการอัปโหลด
+              const cloudinaryUrl = await uploadToCloudinary(file);
               
-              setUploadProgress(100);
-
-              if (!cloudinaryUrl) throw new Error("Upload Failed");
-
-              if (aiResult.isValid) {
-                  setPaySlip(cloudinaryUrl);
-                  setAiStatus('success');
-                  if (aiResult.amount && aiResult.amount > 0) {
-                      setPayAmount(aiResult.amount.toString());
-                      setAiMessage(`✅ ยอดเงิน: ${aiResult.amount} บาท (อัปโหลดเสร็จสิ้น)`);
-                  } else {
-                      setAiMessage("⚠️ สลิปถูกต้อง (อัปโหลดเสร็จสิ้น แต่กรุณากรอกยอดเงิน)");
-                  }
-              } else {
-                  alert(`⛔️ รูปภาพไม่ผ่านการตรวจสอบ: ${aiResult.message}`);
-                  setAiMessage("❌ ไม่ใช่สลิปที่ถูกต้อง");
-                  setAiStatus('error');
-                  setPaySlip(null);
-                  e.target.value = '';
+              if (!cloudinaryUrl) {
+                  throw new Error("อัปโหลดรูปไม่สำเร็จ (กรุณาลองใหม่)");
               }
-          } catch (error) {
-              console.error(error);
-              setAiMessage("⚠️ เกิดข้อผิดพลาด (ตรวจสอบเน็ต/Cloudinary)");
+
+              // อัปโหลดผ่าน -> โชว์รูปทันที
+              setPaySlip(cloudinaryUrl);
+              setUploadProgress(100);
+              
+              // ✅ Step 2: ค่อยเรียก AI (ใส่ try/catch แยก)
+              setAiMessage("กำลังตรวจสอบยอดเงิน...");
+              try {
+                  const aiResult = await analyzeSlip(base64);
+                  
+                  if (aiResult.isValid) {
+                      setAiStatus('success');
+                      if (aiResult.amount && aiResult.amount > 0) {
+                          setPayAmount(aiResult.amount.toString());
+                          setAiMessage(`✅ AI ตรวจพบยอด: ${aiResult.amount} บาท`);
+                      } else {
+                          setAiMessage("⚠️ AI อ่านยอดไม่ได้ (กรุณากรอกเอง)");
+                      }
+                  } else {
+                      // AI บอกว่ารูปผิดปกติ แต่เราแค่เตือน (ไม่ลบรูป)
+                      console.warn("AI Invalid:", aiResult.message);
+                      setAiMessage("⚠️ รูปอาจไม่ชัดเจน (กรอกยอดเองได้เลย)");
+                      setAiStatus('success'); 
+                  }
+              } catch (aiError) {
+                  // ถ้า AI พัง (429 Quota Exceeded) ให้ลงมาตรงนี้
+                  console.warn("AI Quota Error (Ignored):", aiError);
+                  setAiMessage("⚠️ AI ไม่ว่าง (กรอกยอดเองได้เลย)");
+                  setAiStatus('success'); // ยอมให้ผ่าน
+              }
+
+          } catch (error: any) {
+              console.error("Critical Error:", error);
+              setAiMessage("❌ อัปโหลดล้มเหลว");
+              setAiStatus('error');
               setPaySlip(null);
           } finally {
               setIsAnalyzing(false);
