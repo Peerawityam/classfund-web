@@ -34,6 +34,8 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
   const [studentName, setStudentName] = useState(defaultValues?.studentName || currentUserName);
   const [targetUserId, setTargetUserId] = useState<string | undefined>(defaultValues?.userId || (userRole === UserRole.STUDENT ? currentUserId : undefined));
+  
+  // ✅ แก้ไข: slipImage เป็น optional (undefined) ได้
   const [slipImage, setSlipImage] = useState<string | undefined>(undefined);
   const [slipHash, setSlipHash] = useState<string>('');
   
@@ -99,6 +101,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
       reader.onloadend = async () => {
         const base64 = reader.result as string;
         
+        // ถ้าเป็นรายจ่าย ไม่ต้องใช้ AI ตรวจ
         if (type === TransactionType.EXPENSE) {
             setSlipImage(base64);
             return;
@@ -145,12 +148,8 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
     }
   };
 
-  // 🔥 ฟังก์ชันกดปุ่ม Quick Tags (ปรับปรุงใหม่ให้เติมราคาด้วย)
   const handleQuickTagClick = (tagName: string) => {
-      // 1. เติมข้อความในหมายเหตุ (แบบทับเลย เพื่อความง่ายเหมือนในรูป)
       setNote(tagName); 
-
-      // 2. ถ้ามีราคาตั้งไว้ ให้เติมราคาอัตโนมัติ
       if (classroom.periodAmounts && classroom.periodAmounts[tagName]) {
           setAmount1(classroom.periodAmounts[tagName].toString());
       }
@@ -164,10 +163,14 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
         setError('ยอดเงินรวมต้องมากกว่า 0');
         return;
     }
+
+    // ✅ แก้ไข: เช็คสลิปเฉพาะกรณีเป็น "นักเรียน" (isStudent) เท่านั้น
+    // ถ้าเป็น Admin จะข้ามบรรทัดนี้ไปเลย ทำให้กดบันทึกได้แม้ไม่มีรูป
     if (isStudent && type === TransactionType.DEPOSIT && !slipImage) {
         setError('กรุณาแนบสลิป/หลักฐานการโอนเงินที่ถูกต้อง');
         return;
     }
+
     if (!isAdmin && !note.trim()) {
         setError('กรุณาระบุหมายเหตุ (สามารถกดเลือกจากปุ่มด้านล่างได้)');
         return;
@@ -182,6 +185,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
     const finalPeriod1 = isAdmin ? (period1 || undefined) : "รอตรวจสอบ";
 
+    // เตรียม Object ข้อมูล (slipImage ส่งไปเป็น undefined ได้ ถ้าไม่มี)
     const tx1: any = { 
       classroomId: classroom.id,
       type,
@@ -192,7 +196,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
       period: finalPeriod1,
       date: new Date().toISOString(),
       status: isAdmin ? TransactionStatus.APPROVED : TransactionStatus.PENDING,
-      slipImage,
+      slipImage, // ✅ ถ้าไม่มีรูป ค่านี้จะเป็น undefined
       slipHash,
       approver: isAdmin ? currentUserName : undefined
     };
@@ -238,13 +242,13 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                 <h3 className="text-xl font-bold text-gray-800 mb-3">ข้อควรระวังก่อนเริ่ม!</h3>
                 <p className="text-gray-600 text-sm mb-6 leading-relaxed">
                    กรุณาระบุยอดเงินในช่องกรอกข้อมูล<br/>
-                   ให้ <span className="text-rose-600 font-bold underline bg-rose-50 px-1 rounded">ตรงกับยอดในสลิป</span> เท่านั้น
+                   ให้ <span className="text-rose-600 font-bold underline bg-rose-50 px-1 rounded">ตรงกับยอดจริง</span> เท่านั้น
                 </p>
                 <div className="bg-gray-50 p-4 rounded-xl text-xs text-gray-500 mb-6 text-left border border-gray-100">
                     <ul className="list-disc pl-4 space-y-1">
                         <li>ห้ามกรอกยอดที่หารเฉลี่ยเอง</li>
-                        <li>ระบบจะตรวจสอบยอดเงินอัตโนมัติ</li>
-                        <li>หากยอดไม่ตรง หรือไม่ใช่สลิปโอนเงิน ระบบจะปฏิเสธ</li>
+                        <li>ระบบจะตรวจสอบยอดเงินอัตโนมัติ (สำหรับนักเรียน)</li>
+                        <li>Admin สามารถบันทึกยอดได้โดยไม่ต้องมีสลิป</li>
                     </ul>
                 </div>
                 <button onClick={() => setShowIntroWarning(false)} className="w-full py-3.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95">
@@ -283,7 +287,11 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
               {/* --- สลิป --- */}
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-gray-400 uppercase ml-1">หลักฐาน/สลิป</label>
+                {/* ✅ แก้ไข: เพิ่มคำว่า (ถ้ามี) สำหรับ Admin */}
+                <label className="block text-xs font-bold text-gray-400 uppercase ml-1">
+                    หลักฐาน/สลิป {isAdmin && <span className="font-normal text-gray-400">(ถ้ามี)</span>}
+                </label>
+                
                 <div onClick={() => !isAnalyzing && !isSaving && fileInputRef.current?.click()} className={`w-full h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer relative overflow-hidden ${slipImage ? 'border-emerald-200' : 'border-gray-200 hover:border-indigo-400'} transition-all`}>
                   
                   {slipImage ? <img src={slipImage} className="h-full w-full object-contain" /> : <div className="text-center text-gray-400"><span className="text-3xl block mb-2">+</span><span className="text-xs">คลิกเพื่ออัปโหลด</span></div>}
@@ -354,7 +362,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
               {error && <div className="bg-rose-50 p-3 rounded-xl"><p className="text-rose-600 text-xs font-bold">{error}</p></div>}
 
-              {/* --- หมายเหตุ & Quick Tags (แก้ใหม่ให้เหมือนเดิม) --- */}
+              {/* --- หมายเหตุ & Quick Tags --- */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-gray-400 uppercase ml-1">
                     หมายเหตุ {!isAdmin && <span className="text-rose-500">*</span>}
@@ -368,14 +376,13 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                     placeholder="เช่น ค่าเสื้อ, ค่าห้องเดือน ส.ค." 
                 />
                 
-                {/* 🔥 ปุ่ม Quick Tags แบบเติมราคาอัตโนมัติ 🔥 */}
                 {!isAdmin && classroom.activePeriods && classroom.activePeriods.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                         {classroom.activePeriods.map(p => (
                             <button
                                 type="button"
                                 key={p}
-                                onClick={() => handleQuickTagClick(p)} // เรียกใช้ฟังก์ชันใหม่
+                                onClick={() => handleQuickTagClick(p)}
                                 className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-full transition-colors flex items-center gap-1 active:scale-95"
                             >
                                 <span>+ {p}</span>
@@ -415,6 +422,10 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                  <div className="flex justify-between text-sm"><span>ยอดเงิน:</span> <span className="font-bold text-emerald-600">{totalAmount.toLocaleString()} ฿</span></div>
                  <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
                     <span className="font-bold">หมายเหตุ:</span> {note}
+                 </div>
+                 {/* แสดงสถานะสลิปในหน้ายืนยัน */}
+                 <div className="text-xs text-gray-400 mt-1">
+                    <span className="font-bold">สลิป:</span> {slipImage ? 'แนบแล้ว' : 'ไม่ได้แนบ'}
                  </div>
               </div>
 

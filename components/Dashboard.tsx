@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Classroom, Transaction, TransactionStatus, User, UserRole, TransactionType } from '../types';
 import * as api from '../services/apiService';
-import { analyzeSlip } from '../services/geminiService'; 
+import { analyzeSlip } from '../services/geminiService';
 import LoadingScreen from './LoadingScreen';
 import TransactionList from './TransactionList';
 import TransactionForm from './TransactionForm';
@@ -9,7 +9,11 @@ import UserManagement from './UserManagement';
 import ConnectLine from './ConnectLine';
 import Navigation from './Navigation';
 import * as XLSX from 'xlsx';
-import { Camera, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert } from 'lucide-react'; 
+import { Camera, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert, CloudUpload } from 'lucide-react'; 
+
+// 🔥🔥🔥 ตั้งค่า Cloudinary 🔥🔥🔥
+const CLOUDINARY_CLOUD_NAME = "dwa29sfdw";
+const CLOUDINARY_UPLOAD_PRESET = "ClassFund";
 
 interface Props {
   classroom: Classroom;
@@ -28,13 +32,12 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [showForm, setShowForm] = useState(false); 
   const [formDefaults, setFormDefaults] = useState<Partial<Transaction> | undefined>(undefined);
   
+  // UI & Utility
   const [showUserMgmt, setShowUserMgmt] = useState(false);
   const [newPeriodName, setNewPeriodName] = useState('');
   const [showAddPeriod, setShowAddPeriod] = useState(false);
   const [isEditingAnnounce, setIsEditingAnnounce] = useState(false);
   const [announceText, setAnnounceText] = useState('');
-  
-  // UI State
   const [activeMainTab, setActiveMainTab] = useState('home');
   const [subTab, setSubTab] = useState<'PENDING' | 'HISTORY' | 'INDIVIDUAL' | 'MONTHLY'>('PENDING');
   const [isLoading, setIsLoading] = useState(false);
@@ -47,8 +50,12 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [payNote, setPayNote] = useState('');
   const [isSubmittingPay, setIsSubmittingPay] = useState(false);
   
-  // AI State
+  // ✅ State สำหรับเก็บรายการที่เลือกหลายอัน (Multi-select)
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  // AI & Upload State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [aiMessage, setAiMessage] = useState('');
   const [aiStatus, setAiStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -93,30 +100,29 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
      setIsLoading(true); try { await fetch('https://classfund-web.onrender.com/api/broadcast', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message})}); alert('ส่งสำเร็จ'); } catch(e){ alert('Error'); } finally { setIsLoading(false); }
   };
 
+  // ✅ แก้ไข: ปิดหน้าต่างทันทีที่บันทึกเสร็จ (แก้ปัญหาค้าง)
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
     try { 
       // 1. บันทึกรายการแรก
       await api.addTransaction(tx1); 
       
-      // 2. บันทึกรายการที่สอง (ถ้ามี)
+      // 2. ถ้ามีรายการที่สอง (ล้าง Hash ออกเพื่อไม่ให้ซ้ำ)
       if (tx2) {
-          // ล้าง Hash ออก เพื่อไม่ให้ติดล็อคสลิปซ้ำ
           const safeTx2 = { ...tx2, slipHash: undefined };
           await api.addTransaction(safeTx2);
       }
       
-      // 3. ✅ ปิดหน้าต่างทันที! (User จะได้ไม่รู้สึกว่าค้าง)
+      // 3. ปิดหน้าต่างทันที
       setShowForm(false); 
       setFormDefaults(undefined); 
       alert("✅ บันทึกรายการเรียบร้อย");
 
-      // 4. ค่อยแอบโหลดข้อมูลใหม่เบื้องหลัง (ช้าหน่อยก็ไม่เป็นไร เพราะหน้าต่างปิดไปแล้ว)
+      // 4. โหลดข้อมูลใหม่เบื้องหลัง
       await refreshData(); 
 
-    } catch (error) { 
+    } catch (error: any) { 
       console.error(error);
-      alert("เกิดข้อผิดพลาด: " + (error as any).message);
-      // ถ้า Error ไม่ต้องปิดหน้าต่าง ให้ User แก้ไขแล้วกดใหม่ได้
+      alert("เกิดข้อผิดพลาด: " + error.message);
     }
   };
 
@@ -134,6 +140,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
      const file = e.target.files?.[0]; if(file){ const r = new FileReader(); r.onloadend = async () => { const u = {...currentClassroom, paymentQrCode: r.result as string}; await api.updateClassroom(u); setCurrentClassroom(u); }; r.readAsDataURL(file); }
   };
 
+  // --- Helper Functions ---
   const computeSHA256 = async (file: File) => {
     const buffer = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
@@ -141,22 +148,40 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
+  const uploadToCloudinary = async (file: File): Promise<string | null> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+      try {
+          const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+              method: "POST", body: formData
+          });
+          const data = await res.json();
+          return data.secure_url;
+      } catch (error) {
+          console.error("Cloudinary Upload Error:", error);
+          return null;
+      }
+  };
+
+  // 🔥🔥🔥 Logic: เลือกสลิป -> AI ตรวจ -> Cloudinary Upload 🔥🔥🔥
   const handleSlipSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) { alert("ไฟล์ใหญ่เกินไป (สูงสุด 5MB)"); return; }
       
       setIsAnalyzing(true);
-      setAiMessage("🔍 กำลังตรวจสอบความถูกต้อง...");
+      setUploadProgress(10);
+      setAiMessage("AI กำลังตรวจ + อัปโหลดรูป...");
       setAiStatus('idle');
       setPaySlip(null);
 
+      // 1. เช็คสลิปซ้ำ
       try {
           const hash = await computeSHA256(file);
           const check = await api.checkSlipDuplicate(hash);
-          
           if (check.isDuplicate) {
-              alert(`⛔️ สลิปนี้ถูกใช้ไปแล้ว!\nโดย: ${check.usedBy}\nเมื่อ: ${new Date(check.usedAt).toLocaleDateString('th-TH')}`);
+              alert(`⛔️ สลิปนี้ถูกใช้ไปแล้ว!\nโดย: ${check.usedBy}`);
               setIsAnalyzing(false);
               setAiMessage("❌ สลิปซ้ำ (ห้ามใช้ซ้ำ)");
               setAiStatus('error');
@@ -164,28 +189,34 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               return;
           }
           setPaySlipHash(hash);
-      } catch (err) {
-          console.warn("ข้ามการตรวจสอบสลิปซ้ำ (Offline/Error)");
-      }
+      } catch (err) { console.warn("Skip duplicate check"); }
 
+      // 2. อ่านไฟล์และส่งให้ AI + Cloudinary
       const reader = new FileReader();
       reader.onloadend = async () => { 
           const base64 = reader.result as string;
-          
           try {
-              const result = await analyzeSlip(base64);
+              // ทำงานคู่ขนานเพื่อความเร็ว
+              const [aiResult, cloudinaryUrl] = await Promise.all([
+                  analyzeSlip(base64),
+                  uploadToCloudinary(file)
+              ]);
               
-              if (result.isValid) {
-                  setPaySlip(base64);
+              setUploadProgress(100);
+
+              if (!cloudinaryUrl) throw new Error("Upload Failed");
+
+              if (aiResult.isValid) {
+                  setPaySlip(cloudinaryUrl);
                   setAiStatus('success');
-                  if (result.amount && result.amount > 0) {
-                      setPayAmount(result.amount.toString());
-                      setAiMessage(`✅ ยอดเงินถูกต้อง: ${result.amount} บาท`);
+                  if (aiResult.amount && aiResult.amount > 0) {
+                      setPayAmount(aiResult.amount.toString());
+                      setAiMessage(`✅ ยอดเงิน: ${aiResult.amount} บาท (อัปโหลดเสร็จสิ้น)`);
                   } else {
-                      setAiMessage("⚠️ สลิปถูกต้อง แต่อ่านยอดไม่ได้ (กรุณากรอกเอง)");
+                      setAiMessage("⚠️ สลิปถูกต้อง (อัปโหลดเสร็จสิ้น แต่กรุณากรอกยอดเงิน)");
                   }
               } else {
-                  alert(`⛔️ รูปภาพไม่ผ่านการตรวจสอบ\n\nเหตุผล: ${result.message}`);
+                  alert(`⛔️ รูปภาพไม่ผ่านการตรวจสอบ: ${aiResult.message}`);
                   setAiMessage("❌ ไม่ใช่สลิปที่ถูกต้อง");
                   setAiStatus('error');
                   setPaySlip(null);
@@ -193,39 +224,48 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               }
           } catch (error) {
               console.error(error);
-              setAiMessage("⚠️ ระบบ AI ขัดข้อง (กรุณาตรวจสอบเอง)");
-              setPaySlip(base64);
+              setAiMessage("⚠️ เกิดข้อผิดพลาด (ตรวจสอบเน็ต/Cloudinary)");
+              setPaySlip(null);
           } finally {
               setIsAnalyzing(false);
+              setUploadProgress(0);
           }
       };
       reader.readAsDataURL(file);
     }
   };
 
+  // 🔥🔥🔥 Multi-Select Logic (Direct Update - ชัวร์ที่สุด) 🔥🔥🔥
   const handleQuickTagClick = (tagName: string) => {
-      setPayNote(tagName);
-      if (currentClassroom.periodAmounts && currentClassroom.periodAmounts[tagName]) {
-          setPayAmount(currentClassroom.periodAmounts[tagName].toString());
-      }
+      // 1. ตรวจสอบจากค่าปัจจุบันใน State โดยตรง
+      const isSelected = selectedTags.includes(tagName);
       
-      // ✅ แก้ไข: ไม่บังคับ Default 'เงินฝากทั่วไป' ถ้าไม่ใช่ Period ที่รู้จัก
-      if (periods.includes(tagName)) {
-          setPayPeriod(tagName);
+      let newTags;
+      
+      if (isSelected) {
+          // ถ้ามีแล้ว -> เอาออก
+          newTags = selectedTags.filter(t => t !== tagName);
       } else {
-          setPayPeriod(''); // ปล่อยว่างไว้ ให้ไปใช้ Note แทนตอน Submit
+          // ถ้าไม่มี -> เพิ่มเข้าไป
+          newTags = [...selectedTags, tagName];
       }
+
+      // 2. อัปเดต State ทั้งสองอย่างพร้อมกันทันที (ไม่ต้องรอ useEffect)
+      setSelectedTags(newTags);
+      setPayNote(newTags.join(', ')); 
+      
+      // ❌ ไม่แตะต้อง setPayAmount (ตามที่ขอ)
   };
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!payAmount || parseFloat(payAmount) <= 0) { alert("กรุณาระบุจำนวนเงิน"); return; }
-    if (!payNote.trim()) { alert("⚠️ กรุณาระบุหมายเหตุ (เช่น ค่าเสื้อ, ค่าห้อง)"); return; }
-    if (!paySlip && !isAdmin) { alert("กรุณาแนบสลิปที่ถูกต้อง"); return; }
+    if (!payNote.trim()) { alert("⚠️ กรุณาระบุหมายเหตุ"); return; }
+    if (!paySlip && !isAdmin) { alert("กรุณาแนบสลิป (รออัปโหลดให้เสร็จก่อน)"); return; }
     
     setIsSubmittingPay(true);
     try {
+        const status = isAdmin ? TransactionStatus.APPROVED : TransactionStatus.PENDING;
         const txData = {
             userId: user._id,
             studentName: user.name,
@@ -233,18 +273,24 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
             type: TransactionType.DEPOSIT,
             amount: parseFloat(payAmount),
             
-            period: payPeriod || payNote, 
-            
+            period: payNote, // ใช้ Note เป็นชื่อรายการ
             note: payNote,
+            
             slipImage: paySlip || undefined,
             slipHash: paySlipHash,
-            status: TransactionStatus.PENDING,
+            status: status,
+            approver: isAdmin ? user.name : undefined,
             date: new Date().toISOString()
         };
         await api.addTransaction(txData);
-        alert("✅ แจ้งโอนเงินสำเร็จ! รอผู้ดูแลตรวจสอบครับ");
-        setPayAmount(''); setPayPeriod(''); setPaySlip(null); setPayNote(''); setAiMessage(''); setAiStatus('idle'); setPaySlipHash('');
-        setActiveMainTab('home'); setSubTab('PENDING'); refreshData();
+        alert(isAdmin ? "✅ บันทึกยอดเงินเรียบร้อย (อนุมัติทันที)" : "✅ แจ้งโอนเงินสำเร็จ! รอผู้ดูแลตรวจสอบครับ");
+        
+        // Reset Form
+        setPayAmount(''); setPayPeriod(''); setPaySlip(null); setPayNote(''); 
+        setAiMessage(''); setAiStatus('idle'); setPaySlipHash(''); setSelectedTags([]); // ล้าง Tags
+        
+        if (isAdmin) { setActiveMainTab('home'); setSubTab('HISTORY'); } else { setActiveMainTab('home'); setSubTab('PENDING'); }
+        refreshData();
     } catch (error) {
         console.error(error); alert("เกิดข้อผิดพลาดในการส่งข้อมูล");
     } finally {
@@ -453,17 +499,22 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                   <label className="text-xs font-bold text-gray-500 ml-1">หมายเหตุ <span className="text-red-500">*</span></label>
                   <input required type="text" placeholder="เช่น ค่าเสื้อ, ค่าห้องเดือน ส.ค." value={payNote} onChange={(e) => setPayNote(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
                   
-                  {/* Quick Tags */}
+                  {/* 🔥 Multi-Select Tags (กดได้หลายอัน) 🔥 */}
                   {periods.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3">
                         {periods.map(p => (
                             <button
                                 key={p}
-                                type="button"
+                                type="button" // ✅ ใส่ type="button" สำคัญมาก!
                                 onClick={() => handleQuickTagClick(p)}
-                                className="px-3 py-1.5 bg-gray-100 hover:bg-emerald-50 hover:text-emerald-600 text-gray-500 text-[10px] font-bold rounded-full transition-all active:scale-95 border border-gray-100"
+                                className={`px-3 py-1.5 text-[10px] font-bold rounded-full transition-all active:scale-95 border
+                                    ${selectedTags.includes(p) 
+                                        ? 'bg-emerald-500 text-white border-emerald-500 shadow-md transform scale-105' // Active (Selected)
+                                        : 'bg-gray-100 text-gray-500 border-gray-100 hover:bg-emerald-50 hover:text-emerald-600' // Inactive
+                                    }`}
                             >
-                                + {p} {currentClassroom.periodAmounts?.[p] && `(${currentClassroom.periodAmounts[p]}.-)`}
+                                {selectedTags.includes(p) ? '✓ ' : '+ '} 
+                                {p} {currentClassroom.periodAmounts?.[p] && `(${currentClassroom.periodAmounts[p]}.-)`}
                             </button>
                         ))}
                     </div>
@@ -478,6 +529,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         </div>
       )}
 
+      {/* --- PAGE: HOME --- */}
       {activeMainTab === 'home' && (
         <main className="max-w-5xl mx-auto px-4 pt-12 pb-24 md:p-8 space-y-6 animate-fade-in">
           
@@ -560,7 +612,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
              {!isAdmin && (
                  <button onClick={() => setActiveMainTab('scan')} className="col-span-2 bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-2xl shadow-lg shadow-emerald-200 flex items-center justify-between group transition-all">
                     <div className="text-left"><p className="font-bold text-lg">แจ้งฝากเงิน</p><p className="text-emerald-100 text-xs">คลิกเพื่อสแกนและแนบสลิป</p></div>
-
+                    <div className="bg-white/20 w-10 h-10 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition-transform">📸</div>
                  </button>
              )}
 
@@ -608,6 +660,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         </main>
       )}
 
+      {/* MOBILE ACTION SHEET (สำหรับ Admin) */}
       {selectedTx && (
         <div className="fixed inset-0 bg-black/50 z-[70] flex flex-col justify-end animate-fade-in" onClick={() => setSelectedTx(null)}>
             <div className="bg-white rounded-t-3xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
