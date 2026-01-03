@@ -94,7 +94,30 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   };
 
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
-    try { await api.addTransaction(tx1); if (tx2) await api.addTransaction(tx2); await refreshData(); setShowForm(false); setFormDefaults(undefined); } catch (error) { alert("Error"); }
+    try { 
+      // 1. บันทึกรายการแรก
+      await api.addTransaction(tx1); 
+      
+      // 2. บันทึกรายการที่สอง (ถ้ามี)
+      if (tx2) {
+          // ล้าง Hash ออก เพื่อไม่ให้ติดล็อคสลิปซ้ำ
+          const safeTx2 = { ...tx2, slipHash: undefined };
+          await api.addTransaction(safeTx2);
+      }
+      
+      // 3. ✅ ปิดหน้าต่างทันที! (User จะได้ไม่รู้สึกว่าค้าง)
+      setShowForm(false); 
+      setFormDefaults(undefined); 
+      alert("✅ บันทึกรายการเรียบร้อย");
+
+      // 4. ค่อยแอบโหลดข้อมูลใหม่เบื้องหลัง (ช้าหน่อยก็ไม่เป็นไร เพราะหน้าต่างปิดไปแล้ว)
+      await refreshData(); 
+
+    } catch (error) { 
+      console.error(error);
+      alert("เกิดข้อผิดพลาด: " + (error as any).message);
+      // ถ้า Error ไม่ต้องปิดหน้าต่าง ให้ User แก้ไขแล้วกดใหม่ได้
+    }
   };
 
   const handleAddPeriod = async () => {
