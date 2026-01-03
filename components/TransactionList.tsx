@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionStatus, TransactionType } from '../types';
 
@@ -120,7 +119,7 @@ const TransactionList: React.FC<Props> = ({ transactions, isAdmin, onStatusChang
             return;
         }
 
-        onStatusChange(reviewTx._id, status, period1, a1, period2, a2);
+        onStatusChange(reviewTx._id!, status, period1, a1, period2, a2);
         closeReview();
     }
   };

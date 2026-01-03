@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard';
 import Auth from './components/Auth';
-import { Classroom, AppState, User } from './types';
+import LoadingScreen from './components/LoadingScreen';
+import { AppState, User } from './types';
 import * as api from './services/apiService';
 
 function App() {
@@ -9,103 +10,100 @@ function App() {
     currentClassroom: null,
     currentUser: null,
   });
+  
+  // เริ่มต้นเป็น true ไว้ก่อน แต่ถ้ามี Cache จะเปลี่ยนเป็น false ทันทีในเสี้ยววินาที
   const [loading, setLoading] = useState(true);
+  const [loadingStatus, setLoadingStatus] = useState("กำลังตรวจสอบข้อมูล...");
 
+  // 🔥 1. Logic: Show Cache First & Background Sync
   useEffect(() => {
     const initializeApp = async () => {
-        // --- 1. (เพิ่ม) โหลดจาก Cache ทันที เพื่อความเร็ว ---
+        // --- A. 🚀 FAST LOAD: ดึงจาก Cache ในเครื่องมาโชว์ก่อนเลย ---
         const cachedClassroom = localStorage.getItem('classfund_classroom');
         const cachedUser = localStorage.getItem('classfund_user');
+        
+        let hasCache = false;
 
         if (cachedClassroom) {
-            // ถ้ามีข้อมูลห้องเก่า โชว์ไปก่อนเลย
-            setAppState(prev => ({ ...prev, currentClassroom: JSON.parse(cachedClassroom) }));
-        }
-        
-        if (cachedUser && cachedClassroom) {
-            // ถ้ามี User เก่าด้วย ก็ล็อกอินให้เลยทันที!
-            setAppState({
-                currentClassroom: JSON.parse(cachedClassroom),
-                currentUser: JSON.parse(cachedUser)
-            });
-            setLoading(false); // ⚡️ ปิด Loading ทันที ไม่ต้องรอ Server
+            setAppState(prev => ({ 
+                ...prev, 
+                currentClassroom: JSON.parse(cachedClassroom) 
+            }));
         }
 
+        if (cachedUser) {
+            setAppState(prev => ({ 
+                ...prev, 
+                currentUser: JSON.parse(cachedUser) 
+            }));
+        }
 
-        // --- 2. (เหมือนเดิม) ดึงข้อมูลจริงจาก Server (ทำงานเบื้องหลัง) ---
+        // ✅ ถ้ามีข้อมูลครบ ให้ปิดหน้า Loading ทันที! User จะได้ใช้งานได้เลยไม่ต้องรอ Server
+        if (cachedClassroom && cachedUser) {
+            setLoading(false); 
+            hasCache = true;
+        }
+
+        // --- B. 🐢 SLOW LOAD: แอบโหลดข้อมูลจริงจาก Server (Background Fetch) ---
         try {
+            // ถ้าไม่มี Cache เลย (เข้าครั้งแรก) ให้ขึ้นสถานะว่ากำลังปลุก Server
+            if (!hasCache) setLoadingStatus("กำลังปลุกระบบ Server...");
+            
+            // โหลดข้อมูลห้องเรียนล่าสุด
             const classroom = await api.initClassroom();
             
-            // ✅ อัปเดต Cache ห้องเรียน
+            // 💾 บันทึกข้อมูลล่าสุดลง Cache
             localStorage.setItem('classfund_classroom', JSON.stringify(classroom)); 
 
+            // ตรวจสอบ User ล่าสุด
             const savedUserId = localStorage.getItem('last_active_user_id');
             let user: User | null = null;
             
             if (savedUserId) {
                  const users = await api.getUsers();
+                 // หา User จาก ID ที่บันทึกไว้
                  user = users.find(u => u._id === savedUserId) || null;
-
+                 
                  if (user) {
-                     // ✅ อัปเดต Cache User (เผื่อเขาเปลี่ยนชื่อ หรือเปลี่ยนสถานะ)
+                     // ถ้าเจอ User: อัปเดต Cache
                      localStorage.setItem('classfund_user', JSON.stringify(user));
                  } else {
-                     // ถ้า User นี้โดนลบไปแล้วจาก Server ให้เคลียร์ทิ้ง
+                     // ถ้าไม่เจอ User (โดนลบไปแล้ว): เคลียร์ Cache ทิ้ง
                      localStorage.removeItem('classfund_user');
                      localStorage.removeItem('last_active_user_id');
                  }
             }
 
-            // อัปเดต State อีกครั้งด้วยข้อมูลล่าสุด (ถ้าต่างจาก Cache หน้าจอจะกระพริบนิดนึงเพื่ออัปเดต)
+            // 🔄 SYNC: อัปเดตหน้าจอด้วยข้อมูลล่าสุดจาก Server (User อาจจะไม่รู้ตัว)
             setAppState({ currentClassroom: classroom, currentUser: user });
 
         } catch (e) {
-            console.error("Critical Initialization Error", e);
-            // ถ้า API พัง แต่เรามี Cache เก่าอยู่ User ก็ยังใช้งานต่อได้ (Offline Mode)
+            console.error("Sync Error (Offline mode active):", e);
+            // ถ้า Server พัง หรือเน็ตหลุด แต่มี Cache ก็ปล่อยให้เล่น Offline Mode ไป (ไม่ Error)
         } finally {
-            setLoading(false);
+            setLoading(false); // มั่นใจว่าปิดหน้าโหลดแน่นอน
         }
     };
+
     initializeApp();
   }, []);
 
-  const handleLoginSuccess = (user: User) => {
-    localStorage.setItem('last_active_user_id', user._id);
-    
-    // ✅ (เพิ่ม) จำข้อมูล User ทั้งก้อนไว้เลย คราวหน้าจะได้ไม่ต้องรอโหลด
-    localStorage.setItem('classfund_user', JSON.stringify(user)); 
-    
-    setAppState(prev => ({ ...prev, currentUser: user }));
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('last_active_user_id');
-    
-    // ✅ (เพิ่ม) ล้างข้อมูลออก
-    localStorage.removeItem('classfund_user'); 
-    
-    setAppState(prev => ({ ...prev, currentUser: null }));
-  };
-
+  // 🔥 2. Auto Logout Logic (5 Minutes Inactivity)
   useEffect(() => {
-    // ตั้งเวลา 5 นาที (หน่วยมิลลิวินาที: 5 * 60 * 1000)
-    const TIMEOUT_DURATION = 5 * 60 * 1000; 
+    const TIMEOUT_DURATION = 5 * 60 * 1000; // 5 นาที
     let logoutTimer: NodeJS.Timeout;
 
     const resetTimer = () => {
-      // ถ้าไม่ได้ Login อยู่ ไม่ต้องทำอะไร
       if (!appState.currentUser) return;
-
       clearTimeout(logoutTimer);
       logoutTimer = setTimeout(() => {
-        console.log("Session Timeout");
-        handleLogout(); // เรียกใช้ฟังก์ชัน Logout เดียวกันกับข้างบน
+        console.log("Session Timeout: Auto Logout");
+        handleLogout(); 
       }, TIMEOUT_DURATION);
     };
 
     if (appState.currentUser) {
         resetTimer();
-        
         const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
         events.forEach(event => window.addEventListener(event, resetTimer));
 
@@ -114,15 +112,46 @@ function App() {
             events.forEach(event => window.removeEventListener(event, resetTimer));
         };
     }
-  }, [appState.currentUser]); // ทำงานใหม่ทุกครั้งที่สถานะ currentUser เปลี่ยน
+  }, [appState.currentUser]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div></div>;
+  // ฟังก์ชันเมื่อ Login สำเร็จ
+  const handleLoginSuccess = (user: User) => {
+    localStorage.setItem('last_active_user_id', user._id);
+    localStorage.setItem('classfund_user', JSON.stringify(user));
+    setAppState(prev => ({ ...prev, currentUser: user }));
+  };
 
+  // ฟังก์ชัน Logout
+  const handleLogout = () => {
+    // ล้างแค่ User แต่เก็บข้อมูลห้องเรียนไว้ (จะได้ไม่ต้องโหลดใหม่ตอน Login อีกรอบ)
+    localStorage.removeItem('last_active_user_id');
+    localStorage.removeItem('classfund_user');
+    setAppState(prev => ({ ...prev, currentUser: null }));
+  };
+
+  // ---------------- RENDER ----------------
+
+  // 1. ถ้ากำลังโหลด และไม่มี Cache ให้โชว์หน้า Loading สวยๆ
+  if (loading) return <LoadingScreen status={loadingStatus} />;
+
+  // 2. ถ้ามีข้อมูลพร้อมแล้ว (จาก Cache หรือ Server) -> ไป Dashboard
   if (appState.currentClassroom && appState.currentUser) {
-    return <Dashboard classroom={appState.currentClassroom} user={appState.currentUser} onLogout={handleLogout} />;
+    return (
+        <Dashboard 
+            classroom={appState.currentClassroom} 
+            user={appState.currentUser} 
+            onLogout={handleLogout} 
+        />
+    );
   }
 
-  return <Auth className={appState.currentClassroom?.name || 'ระบบเช็ค/เก็บเงิน'} onLogin={handleLoginSuccess} />;
+  // 3. ถ้ายังไม่ Login (หรือหา User ไม่เจอ) -> ไปหน้า Login
+  return (
+    <Auth 
+        className={appState.currentClassroom?.name || 'ระบบเช็ค/เก็บเงิน'} 
+        onLogin={handleLoginSuccess} 
+    />
+  );
 }
 
 export default App;

@@ -58,7 +58,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
     }
   }, [amount1, amount2, isAdmin]);
 
-  // Auto-fill ราคา (เฉพาะ Admin และต้องเป็นตอนเลือกรายการ ไม่ใช่ตอน AI ทำงาน)
+  // Auto-fill ราคา (เฉพาะ Admin)
   useEffect(() => {
     if (isAdmin && period1 && classroom.periodAmounts?.[period1] && !amount1) {
        setAmount1(classroom.periodAmounts[period1].toString());
@@ -78,11 +78,10 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // 🔥 แก้ไข Logic ตรงนี้เพื่อบล็อกรูปมั่ว
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // 1. เช็คสลิปซ้ำ (Duplicate Check)
+      // 1. เช็คสลิปซ้ำ
       const hash = await computeSHA256(file);
       setSlipHash(hash);
       
@@ -100,13 +99,11 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
       reader.onloadend = async () => {
         const base64 = reader.result as string;
         
-        // ถ้าเป็น Admin จ่ายออก (Expense) ไม่ต้องตรวจ
         if (type === TransactionType.EXPENSE) {
             setSlipImage(base64);
             return;
         }
         
-        // ถ้าเป็น Deposit -> เริ่มตรวจ AI
         setIsAnalyzing(true);
         setAiResult(null);
             
@@ -114,7 +111,6 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
             const result = await analyzeSlip(base64);
             
             if (result.isValid) {
-                // ✅ ผ่าน: ให้โชว์รูปและเติมเงิน
                 setSlipImage(base64);
                 if (result.amount) {
                     setAmount1(result.amount.toString());
@@ -122,15 +118,13 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                 setAiResult(result);
                 setError('');
             } else {
-                // ❌ ไม่ผ่าน: บล็อกทันที!
                 alert(`⛔️ ไม่สามารถใช้รูปนี้ได้\n\nเหตุผล: ${result.message || "ไม่ใช่สลิปโอนเงิน หรือข้อมูลไม่ชัดเจน"}`);
-                setSlipImage(undefined); // ล้างรูปออก
+                setSlipImage(undefined);
                 setSlipHash('');
-                if (fileInputRef.current) fileInputRef.current.value = ''; // ล้าง input file
+                if (fileInputRef.current) fileInputRef.current.value = '';
             }
         } catch (error) {
             console.error("AI Error:", error);
-            // กรณี AI พัง (Network Error) ให้แจ้งเตือน แต่ยอมให้แนบ (Fail-safe)
             alert("ระบบ AI ขัดข้องชั่วคราว (คุณสามารถกรอกยอดเงินเองได้)");
             setSlipImage(base64);
         } finally {
@@ -151,12 +145,15 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
     }
   };
 
-  const handleAddNoteTag = (tag: string) => {
-      setNote(prev => {
-          if (!prev) return tag;
-          if (prev.includes(tag)) return prev;
-          return `${prev}, ${tag}`;
-      });
+  // 🔥 ฟังก์ชันกดปุ่ม Quick Tags (ปรับปรุงใหม่ให้เติมราคาด้วย)
+  const handleQuickTagClick = (tagName: string) => {
+      // 1. เติมข้อความในหมายเหตุ (แบบทับเลย เพื่อความง่ายเหมือนในรูป)
+      setNote(tagName); 
+
+      // 2. ถ้ามีราคาตั้งไว้ ให้เติมราคาอัตโนมัติ
+      if (classroom.periodAmounts && classroom.periodAmounts[tagName]) {
+          setAmount1(classroom.periodAmounts[tagName].toString());
+      }
   };
 
   const handlePreSubmit = (e: React.FormEvent) => {
@@ -167,12 +164,10 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
         setError('ยอดเงินรวมต้องมากกว่า 0');
         return;
     }
-    // ถ้าไม่มีรูป (เพราะโดน AI ดีดออกไปแล้ว) จะติดตรงนี้
     if (isStudent && type === TransactionType.DEPOSIT && !slipImage) {
         setError('กรุณาแนบสลิป/หลักฐานการโอนเงินที่ถูกต้อง');
         return;
     }
-    
     if (!isAdmin && !note.trim()) {
         setError('กรุณาระบุหมายเหตุ (สามารถกดเลือกจากปุ่มด้านล่างได้)');
         return;
@@ -286,7 +281,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                 )}
               </div>
 
-              {/* --- สลิป + Loading AI --- */}
+              {/* --- สลิป --- */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-gray-400 uppercase ml-1">หลักฐาน/สลิป</label>
                 <div onClick={() => !isAnalyzing && !isSaving && fileInputRef.current?.click()} className={`w-full h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer relative overflow-hidden ${slipImage ? 'border-emerald-200' : 'border-gray-200 hover:border-indigo-400'} transition-all`}>
@@ -359,7 +354,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
               {error && <div className="bg-rose-50 p-3 rounded-xl"><p className="text-rose-600 text-xs font-bold">{error}</p></div>}
 
-              {/* --- หมายเหตุ & Quick Tags --- */}
+              {/* --- หมายเหตุ & Quick Tags (แก้ใหม่ให้เหมือนเดิม) --- */}
               <div className="space-y-1">
                 <label className="block text-xs font-bold text-gray-400 uppercase ml-1">
                     หมายเหตุ {!isAdmin && <span className="text-rose-500">*</span>}
@@ -373,16 +368,22 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                     placeholder="เช่น ค่าเสื้อ, ค่าห้องเดือน ส.ค." 
                 />
                 
+                {/* 🔥 ปุ่ม Quick Tags แบบเติมราคาอัตโนมัติ 🔥 */}
                 {!isAdmin && classroom.activePeriods && classroom.activePeriods.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                         {classroom.activePeriods.map(p => (
                             <button
                                 type="button"
                                 key={p}
-                                onClick={() => handleAddNoteTag(p)}
-                                className="px-3 py-1 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 text-gray-600 text-xs font-medium rounded-full border border-gray-200 transition-all active:scale-95"
+                                onClick={() => handleQuickTagClick(p)} // เรียกใช้ฟังก์ชันใหม่
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold rounded-full transition-colors flex items-center gap-1 active:scale-95"
                             >
-                                + {p}
+                                <span>+ {p}</span>
+                                {classroom.periodAmounts?.[p] && (
+                                    <span className="text-gray-400 font-normal">
+                                        ({classroom.periodAmounts[p]}.-)
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>
