@@ -253,7 +253,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-  // 🔥🔥🔥 Multi-Select Logic (Direct Update - ชัวร์ที่สุด) 🔥🔥🔥
+  
   const handleQuickTagClick = (tagName: string) => {
       // 1. ตรวจสอบจากค่าปัจจุบันใน State โดยตรง
       const isSelected = selectedTags.includes(tagName);
@@ -416,13 +416,35 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         isAdmin={isAdmin}
         periods={periods}
         onStatusChange={async (id, status, p1, a1, p2, a2) => {
-            await api.updateTransaction(id, { status, period: p1, amount: a1, approver: user.name });
-            if (p2 && (a2||0)>0) { const org = transactions.find(t=>t._id===id); if(org) await api.addTransaction({...org, amount: a2, period: p2, status: TransactionStatus.APPROVED, note: `${org.note} (ส่วนเพิ่ม)`, approver: user.name} as any); }
-            await refreshData();
-        }}
-        filter={subTab === 'PENDING' ? 'PENDING' : 'ALL'}
-      />
-    );
+          await api.updateTransaction(id, { 
+            status, 
+            period: p1, 
+            amount: a1, 
+            approver: user.name 
+        });
+
+        // 2. ถ้ามีรายการที่ 2 (p2) ให้สร้างใหม่
+        if (p2 && (a2 || 0) > 0) { 
+            const org = transactions.find(t => t._id === id);
+            if (org) {
+                const tx2 = { 
+                    ...org, 
+                    _id: undefined, 
+                    amount: a2, 
+                    period: p2, 
+                    status: TransactionStatus.APPROVED, 
+                    note: org.note ? `${org.note} (ส่วนเพิ่ม)` : `(ส่วนเพิ่ม)`, 
+                    approver: user.name,
+                    slipHash: undefined 
+                };
+                await api.addTransaction(tx2 as any); 
+            } 
+        }
+        await refreshData();
+    }}
+    filter={subTab === 'PENDING' ? 'PENDING' : 'ALL'}
+  />
+);
   };
 
   if (isLoading) return <LoadingScreen />;
