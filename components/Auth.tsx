@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { login } from '../services/apiService';
 import { User } from '../types';
+import { AlertCircle } from 'lucide-react';
 
 interface Props {
   className: string;
@@ -14,7 +15,7 @@ const Auth: React.FC<Props> = ({ className, onLogin }) => {
   const [error, setError] = useState('');
   
   // ----------------------------------------------------
-  // แก้ไขตรงนี้: เปลี่ยน false เป็น true เพื่อให้แสดงทันทีที่เปิดหน้าเว็บ
+  // ปลี่ยน false เป็น true เพื่อให้แสดงทันทีที่เปิดหน้าเว็บ
   // ----------------------------------------------------
   const [showHelp, setShowHelp] = useState(true); 
 
@@ -153,6 +154,25 @@ const Auth: React.FC<Props> = ({ className, onLogin }) => {
             <code className="text-[10px] text-gray-500">user: รหัสนักศึกษา | pass: 6 ตัวท้ายรหัสนักศึกษา (10XXXX)</code>
         </div>
       </div>
+
+      <a 
+      href="https://m.me/peerawit.yamsakol.2025" 
+      target="_blank" 
+      rel="noreferrer"
+      className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-xl shadow-slate-200 border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
+    >
+       <div className="relative">
+         <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-20"></div>
+         <div className="bg-gradient-to-tr from-red-500 to-rose-400 p-2 rounded-full text-white shadow-lg relative z-10">
+            <AlertCircle size={20} />
+         </div>
+       </div>
+       <div className="text-left hidden md:block"> {/* ซ่อนข้อความในมือถือถ้าจอเล็ก หรือจะลบ hidden ออกก็ได้ */}
+          <p className="text-[10px] text-slate-400 font-medium">พบปัญหาการใช้งาน?</p>
+          <p className="text-sm font-bold text-slate-700">ติดต่อผู้ดูแล</p>
+       </div>
+    </a>
+
     </div>
   );
 };

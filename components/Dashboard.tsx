@@ -100,6 +100,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
      setIsLoading(true); try { await fetch('https://classfund-web.onrender.com/api/broadcast', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message})}); alert('ส่งสำเร็จ'); } catch(e){ alert('Error'); } finally { setIsLoading(false); }
   };
 
+  // ✅ แก้ไข: ปิดหน้าต่างทันทีที่บันทึกเสร็จ (แก้ปัญหาค้าง)
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
     try { 
       // 1. บันทึกรายการแรก
@@ -744,6 +745,25 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
       {showForm && ( <TransactionForm classroom={currentClassroom} userRole={user.role} currentUserId={user._id} currentUserName={user.name} users={users} defaultValues={formDefaults} onSubmit={handleAddTransaction} onCancel={() => { setShowForm(false); setFormDefaults(undefined); }} /> )}
       {showUserMgmt && <UserManagement onClose={() => { setShowUserMgmt(false); refreshData(); }} />}
+  
+      <a 
+      href="https://m.me/peerawit.yamsakol.2025" 
+      target="_blank" 
+      rel="noreferrer"
+      className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-xl shadow-slate-200 border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
+    >
+       <div className="relative">
+         <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-20"></div>
+         <div className="bg-gradient-to-tr from-red-500 to-rose-400 p-2 rounded-full text-white shadow-lg relative z-10">
+            <AlertCircle size={20} />
+         </div>
+       </div>
+       <div className="text-left hidden md:block">
+          <p className="text-[10px] text-slate-400 font-medium">พบปัญหาการใช้งาน?</p>
+          <p className="text-sm font-bold text-slate-700">ติดต่อผู้ดูแล</p>
+       </div>
+    </a>
+
       {user && !isAdmin && !(user as any).lineUserId && ( <ConnectLine currentUser={user} onLinkSuccess={() => window.location.reload()} /> )}
     </div>
   );
