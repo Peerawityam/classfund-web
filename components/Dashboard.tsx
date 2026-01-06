@@ -9,11 +9,42 @@ import UserManagement from './UserManagement';
 import ConnectLine from './ConnectLine';
 import Navigation from './Navigation';
 import * as XLSX from 'xlsx';
-import { Camera, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert, CloudUpload } from 'lucide-react'; 
+import { Camera, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert, MousePointerClick, Trophy, Star, Crown, Medal, Zap} from 'lucide-react'; 
 
 // 🔥 Config ถูกต้องตามรูปภาพของคุณ
 const CLOUDINARY_CLOUD_NAME = "dfztd6dye";
 const CLOUDINARY_UPLOAD_PRESET = "classfund_preset";
+
+// --- Gamification Logic (วางไว้ตรงนี้) ---
+
+const calculateLevel = (totalPaid: number) => {
+  const xp = totalPaid * 10; // สูตรคำนวณ XP จากเงินที่จ่าย
+  
+  if (xp < 1000) return { level: 1, title: 'เด็กใหม่ 🐣', nextXp: 1000, color: 'bg-gray-400' };
+  if (xp < 4000) return { level: 2, title: 'ผู้ช่วยห้อง 🥉', nextXp: 4000, color: 'bg-amber-600' }; // Bronze
+  if (xp < 8000) return { level: 3, title: 'เศรษฐีประจำห้อง 🥈', nextXp: 8000, color: 'bg-slate-400' }; // Silver
+  if (xp < 12000) return { level: 4, title: 'ป๋าเปย์ตัวจริง 🥇', nextXp: 12000, color: 'bg-yellow-400' }; // Gold
+  return { level: 5, title: 'ตำนานแห่ง ClassFund 💎', nextXp: 15000, color: 'bg-rose-500' }; // Diamond
+};
+
+// 2. ฟังก์ชันเช็คเหรียญตรา (Badges)
+const getBadges = (totalPaid: number, txCount: number) => {
+  const badges = [];
+  
+  // จ่ายครั้งแรก
+  if (totalPaid > 0) badges.push({ id: 'first_blood', icon: <Zap size={14} />, name: 'เปิดบิลแรก', color: 'bg-yellow-100 text-yellow-700' });
+  
+  // จ่ายครบ 500 บาท
+  if (totalPaid >= 500) badges.push({ id: 'supporter', icon: <Star size={14} />, name: 'ผู้สนับสนุน', color: 'bg-blue-100 text-blue-700' });
+  
+  // จ่ายครบ 1,000 บาท
+  if (totalPaid >= 1000) badges.push({ id: 'whale', icon: <Crown size={14} />, name: 'สายเปย์', color: 'bg-purple-100 text-purple-700' });
+  
+  // จ่ายบ่อย (5 ครั้งขึ้นไป)
+  if (txCount >= 5) badges.push({ id: 'consistent', icon: <Medal size={14} />, name: 'จ่ายสม่ำเสมอ', color: 'bg-green-100 text-green-700' });
+  
+  return badges;
+};
 
 interface Props {
   classroom: Classroom;
@@ -80,9 +111,11 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       
       setCurrentClassroom(room);
       setUsers(allUsers);
+
       const relevantTxs = isAdmin ? allTxs : allTxs.filter(tx => tx.userId === user._id);
       setTransactions(relevantTxs);
-      setBalance(api.calculateBalance(allTxs, isAdmin ? undefined : user._id));
+
+      setBalance(api.calculateBalance(allTxs));
     } catch (error) {
       console.error("Failed to load data", error);
     } finally {
@@ -95,10 +128,49 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   };
 
   const handleLineBroadcast = async () => {
-     const message = prompt("📢 พิมพ์ข้อความประกาศเข้า LINE:"); if(!message) return;
-     if(!confirm(`ยืนยันส่ง: "${message}"?`)) return;
-     setIsLoading(true); try { await fetch('https://classfund-web.onrender.com/api/broadcast', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({message})}); alert('ส่งสำเร็จ'); } catch(e){ alert('Error'); } finally { setIsLoading(false); }
-  };
+
+    // 2. รับข้อความ
+    const message = prompt("📢 พิมพ์ข้อความประกาศเข้า LINE:"); 
+    if (!message || message.trim() === "") return; // ป้องกันส่งข้อความว่าง
+
+    // 3. (Optional) เพิ่มรหัสยืนยันชั้นที่ 2 ป้องกันมือลั่น
+    const adminPin = prompt("🔒 กรุณาใส่รหัส Admin เพื่อยืนยันการส่ง:");
+    if (adminPin !== "00189") { 
+        alert("❌ รหัสผิดพลาด ยกเลิกการส่ง");
+        return;
+    }
+
+    // 4. ยืนยันครั้งสุดท้าย
+    if(!confirm(`ยืนยันส่งข้อความนี้ให้สมาชิกทุกคน?\n\n"${message}"`)) return;
+
+    setIsLoading(true); 
+    try { 
+        const response = await fetch('https://classfund-web.onrender.com/api/broadcast', { 
+            method: 'POST', 
+            headers: {
+                'Content-Type': 'application/json',
+            }, 
+            body: JSON.stringify({ 
+                message: message.trim(),
+                pin: adminPin // ส่ง PIN ไปเช็คที่หลังบ้านด้วยก็ได้
+            })
+        });
+
+        if (response.ok) {
+            alert('✅ ส่งประกาศสำเร็จเรียบร้อย');
+        } else {
+            // กรณีหลังบ้านตอบกลับมาว่า Error (เช่น 401 Unauthorized)
+            const errorData = await response.json();
+            alert(`❌ ส่งไม่สำเร็จ: ${errorData.message || 'เกิดข้อผิดพลาด'}`);
+        }
+
+    } catch(e) { 
+        console.error(e);
+        alert('❌ Error: ไม่สามารถเชื่อมต่อ Server ได้'); 
+    } finally { 
+        setIsLoading(false); 
+    }
+ };
 
   // ✅ แก้ไข: ปิดหน้าต่างทันทีที่บันทึกเสร็จ (แก้ปัญหาค้าง)
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
@@ -572,26 +644,79 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
       {/* --- PAGE: HOME --- */}
       {activeMainTab === 'home' && (
-        <main className="max-w-5xl mx-auto px-4 pt-12 pb-24 md:p-8 space-y-6 animate-fade-in">
+        <main className="max-w-5xl mx-auto px-4 pt-4 pb-24 md:p-8 space-y-6 animate-fade-in">
           
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-             <div>
-                <h1 className="text-2xl font-bold text-gray-800">สวัสดี, {user.name} 👋</h1>
-                <p className="text-gray-500 text-sm">ยินดีต้อนรับสู่ระบบ {currentClassroom.name}</p>
+          {/* --- Profile & Gamification Section --- */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
+             
+             {/* Background Decoration */}
+             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+
+             <div className="flex-1 relative z-10">
+                <div className="flex items-center gap-3 mb-2">
+                    <h1 className="text-2xl font-bold text-gray-800">สวัสดี, {user.name} 👋</h1>
+                    {/* แสดง Level Badge */}
+                    {!isAdmin && (
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1 ${calculateLevel(api.calculateBalance(transactions, user._id)).color}`}>
+                            <Trophy size={12} /> LV.{calculateLevel(api.calculateBalance(transactions, user._id)).level}
+                        </span>
+                    )}
+                </div>
+
+                {isAdmin ? (
+                    <p className="text-gray-500 text-sm">ยินดีต้อนรับผู้ดูแลระบบ</p>
+                ) : (
+                    <>
+                        {/* หลอด EXP */}
+                        {(() => {
+                            const balance = api.calculateBalance(transactions, user._id);
+                            const userLevel = calculateLevel(balance);
+                            const currentXp = balance * 10;
+                            // คำนวณ % หลอด (คิดแบบง่ายๆ เทียบกับ nextXp)
+                            const progress = Math.min((currentXp / userLevel.nextXp) * 100, 100);
+                            
+                            return (
+                                <div className="max-w-xs mt-2">
+                                    <div className="flex justify-between text-[10px] text-gray-400 mb-1 font-bold">
+                                        <span>{userLevel.title}</span>
+                                        <span>{currentXp.toLocaleString()} / {userLevel.nextXp.toLocaleString()} XP</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full transition-all duration-1000 ease-out ${userLevel.color}`} style={{ width: `${progress}%` }}></div>
+                                    </div>
+                                    
+                                    {/* Badges List */}
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {getBadges(balance, transactions.filter(t => t.userId === user._id && t.status === TransactionStatus.APPROVED).length).map(badge => (
+                                            <div key={badge.id} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${badge.color}`}>
+                                                {badge.icon} {badge.name}
+                                            </div>
+                                        ))}
+                                        {api.calculateBalance(transactions, user._id) === 0 && (
+                                            <span className="text-[10px] text-gray-300 italic">ยังไม่มีตราประทับ (เริ่มจ่ายเงินเพื่อสะสม)</span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                    </>
+                )}
              </div>
-             <div className="bg-white px-6 py-3 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
+
+             {/* กล่องแสดงยอดเงิน (ขยับมาขวาเหมือนเดิม) */}
+             <div className="flex items-center gap-6 mt-2 md:mt-0 relative z-10 bg-white/50 backdrop-blur-sm p-2 rounded-2xl">
                 {!isAdmin && (
                     <>
                         <div className="text-right">
-                           <p className="text-xs text-gray-400 uppercase font-bold">ยอดเงินส่วนตัว</p>
+                           <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">ยอดเงินส่วนตัว</p>
                            <p className="text-3xl font-bold text-emerald-600">{api.calculateBalance(transactions, user._id).toLocaleString()} ฿</p>
                         </div>
-                        <div className="h-10 w-px bg-gray-100"></div>
+                        <div className="h-8 w-px bg-gray-200"></div>
                     </>
                 )}
                 <div className="text-right">
-                    <p className="text-sm text-gray-400 uppercase font-bold">เงินกองกลาง</p>
-                    <p className="text-3xl font-extrabold text-emerald-600">{balance.toLocaleString()} ฿</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">เงินกองกลาง</p>
+                    <p className="text-3xl font-extrabold text-indigo-600">{balance.toLocaleString()} ฿</p>
                 </div>
              </div>
           </div>
@@ -653,7 +778,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
              {!isAdmin && (
                  <button onClick={() => setActiveMainTab('scan')} className="col-span-2 bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-2xl shadow-lg shadow-emerald-200 flex items-center justify-between group transition-all">
                     <div className="text-left"><p className="font-bold text-lg">แจ้งฝากเงิน</p><p className="text-emerald-100 text-xs">คลิกเพื่อสแกนและแนบสลิป</p></div>
-                    <div className="bg-white/20 w-10 h-10 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition-transform">📸</div>
+                    <div className="bg-white/20 w-10 h-10 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+   <MousePointerClick size={24} className="text-white" />
+</div>
                  </button>
              )}
 
@@ -750,7 +877,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       href="https://m.me/peerawit.yamsakol.2025" 
       target="_blank" 
       rel="noreferrer"
-      className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-xl shadow-slate-200 border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
+      className="fixed bottom-20 left-3 z-50 flex items-center gap-2 bg-white px-4 py-3 rounded-2xl shadow-xl shadow-slate-200 border border-slate-100 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
     >
        <div className="relative">
          <div className="absolute inset-0 bg-red-400 rounded-full animate-ping opacity-20"></div>
