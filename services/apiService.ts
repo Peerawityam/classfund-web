@@ -148,13 +148,59 @@ export const updateTransactionStatus = async (id: string, status: TransactionSta
   });
 };
 
-export const calculateBalance = (txs: Transaction[], userId?: string): number => {
-  return txs
-    .filter(t => t.status === TransactionStatus.APPROVED)
-    .filter(t => !userId || t.userId === userId)
+export const calculateBalance = (
+  txs: Transaction[], 
+  userId?: string, 
+  mode: 'NET' | 'INCOME' | 'EXPENSE' = 'NET'
+): number => {
+
+  // 1. Safety Check
+  if (!Array.isArray(txs)) {
+    console.error('❌ [CalcBalance] Error: txs is not an array!', txs);
+    return 0;
+  }
+
+  const result = txs
+    // 2. กรอง Status
+    .filter(t => {
+      const isApproved = String(t.status || '').toUpperCase() === 'APPROVED';
+      return isApproved;
+    })
+    
+    // 3. กรอง User
+    .filter(t => {
+      const matchUser = !userId || String(t.userId) === String(userId);
+      return matchUser;
+    })
+    
     .reduce((acc, curr) => {
-      return curr.type === TransactionType.DEPOSIT ? acc + curr.amount : acc - curr.amount;
+      // 4. แปลงค่าเงิน
+      const amount = Math.abs(Number(curr.amount) || 0);
+      
+      // 5. จัดการประเภท
+      const originalType = curr.type; // เก็บค่าเดิมไว้ดู log
+      const typeStr = String(curr.type || '').trim().toUpperCase();
+
+      // 6. กำหนดหมวดหมู่
+      const incomeTypes = ['DEPOSIT', 'INCOME', '0']; 
+      const isDeposit = incomeTypes.includes(typeStr);
+
+      // 7. คำนวณตาม Mode
+      switch (mode) {
+        case 'INCOME':
+          return isDeposit ? acc + amount : acc;
+
+        case 'EXPENSE':
+          return !isDeposit ? acc + amount : acc;
+
+        case 'NET':
+        default:
+          return isDeposit ? acc + amount : acc - amount;
+      }
     }, 0);
+
+  
+  return result;
 };
 
 export const updateTransaction = async (id: string, data: any) => {
