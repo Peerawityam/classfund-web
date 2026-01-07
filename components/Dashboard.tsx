@@ -9,40 +9,29 @@ import UserManagement from './UserManagement';
 import ConnectLine from './ConnectLine';
 import Navigation from './Navigation';
 import * as XLSX from 'xlsx';
-import { Camera, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert, MousePointerClick, Trophy, Star, Crown, Medal, Zap } from 'lucide-react';
+// ✅ Import ไอคอน Lock และอื่นๆ ครบถ้วน
+import { Lock, Upload, CheckCircle, AlertCircle, PlusCircle, X, Sparkles, ShieldAlert, MousePointerClick, Trophy, Star, Crown, Medal, Zap } from 'lucide-react';
 
-// 🔥 Config ถูกต้องตามรูปภาพของคุณ
+// 🔥 Config
 const CLOUDINARY_CLOUD_NAME = "dfztd6dye";
 const CLOUDINARY_UPLOAD_PRESET = "classfund_preset";
 
-// --- Gamification Logic (วางไว้ตรงนี้) ---
-
+// --- Gamification Logic ---
 const calculateLevel = (totalPaid: number) => {
-  const xp = totalPaid * 10; // สูตรคำนวณ XP จากเงินที่จ่าย
-
+  const xp = totalPaid * 10;
   if (xp < 1000) return { level: 1, title: 'เด็กใหม่ 🐣', nextXp: 1000, color: 'bg-gray-400' };
-  if (xp < 4000) return { level: 2, title: 'ผู้ช่วยห้อง 🥉', nextXp: 4000, color: 'bg-amber-600' }; // Bronze
-  if (xp < 8000) return { level: 3, title: 'เศรษฐีประจำห้อง 🥈', nextXp: 8000, color: 'bg-slate-400' }; // Silver
-  if (xp < 12000) return { level: 4, title: 'ป๋าเปย์ตัวจริง 🥇', nextXp: 12000, color: 'bg-yellow-400' }; // Gold
-  return { level: 5, title: 'ตำนานแห่ง ClassFund 💎', nextXp: 15000, color: 'bg-rose-500' }; // Diamond
+  if (xp < 4000) return { level: 2, title: 'ผู้ช่วยห้อง 🥉', nextXp: 4000, color: 'bg-amber-600' };
+  if (xp < 8000) return { level: 3, title: 'เศรษฐีประจำห้อง 🥈', nextXp: 8000, color: 'bg-slate-400' };
+  if (xp < 12000) return { level: 4, title: 'ป๋าเปย์ตัวจริง 🥇', nextXp: 12000, color: 'bg-yellow-400' };
+  return { level: 5, title: 'ตำนานแห่ง ClassFund 💎', nextXp: 15000, color: 'bg-rose-500' };
 };
 
-// 2. ฟังก์ชันเช็คเหรียญตรา (Badges)
 const getBadges = (totalPaid: number, txCount: number) => {
   const badges = [];
-
-  // จ่ายครั้งแรก
   if (totalPaid > 0) badges.push({ id: 'first_blood', icon: <Zap size={14} />, name: 'เปิดบิลแรก', color: 'bg-yellow-100 text-yellow-700' });
-
-  // จ่ายครบ 500 บาท
   if (totalPaid >= 500) badges.push({ id: 'supporter', icon: <Star size={14} />, name: 'ผู้สนับสนุน', color: 'bg-blue-100 text-blue-700' });
-
-  // จ่ายครบ 1,000 บาท
   if (totalPaid >= 1000) badges.push({ id: 'whale', icon: <Crown size={14} />, name: 'สายเปย์', color: 'bg-purple-100 text-purple-700' });
-
-  // จ่ายบ่อย (5 ครั้งขึ้นไป)
   if (txCount >= 5) badges.push({ id: 'consistent', icon: <Medal size={14} />, name: 'จ่ายสม่ำเสมอ', color: 'bg-green-100 text-green-700' });
-
   return badges;
 };
 
@@ -81,7 +70,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [payNote, setPayNote] = useState('');
   const [isSubmittingPay, setIsSubmittingPay] = useState(false);
 
-  // ✅ State สำหรับเก็บรายการที่เลือกหลายอัน (Multi-select)
+  // Multi-select Tags
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // AI & Upload State
@@ -123,47 +112,55 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
+  // ✅ ฟังก์ชันเปิด-ปิดระบบรับเงิน
+  const handleTogglePaymentSystem = async () => {
+    const newState = !currentClassroom.isPaymentActive;
+    const confirmMsg = newState
+      ? "ต้องการ 'เปิด' ระบบรับชำระเงินใช่ไหม?"
+      : "ต้องการ 'ปิด' ระบบรับชำระเงินชั่วคราวใช่ไหม? (สมาชิกจะเข้าหน้านั้นไม่ได้)";
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const updated = { ...currentClassroom, isPaymentActive: newState };
+      await api.updateClassroom(updated);
+      setCurrentClassroom(updated);
+    } catch (error) {
+      alert("เกิดข้อผิดพลาดในการเปลี่ยนสถานะ");
+      console.error(error);
+    }
+  };
+
   const handleSaveAnnouncement = async () => {
     try { await api.updateAnnouncement(currentClassroom._id, announceText); alert('บันทึกประกาศเรียบร้อย ✅'); setIsEditingAnnounce(false); refreshData(); } catch (e) { alert('เกิดข้อผิดพลาดในการบันทึกประกาศ'); }
   };
 
   const handleLineBroadcast = async () => {
-
-    // 2. รับข้อความ
     const message = prompt("📢 พิมพ์ข้อความประกาศเข้า LINE:");
-    if (!message || message.trim() === "") return; // ป้องกันส่งข้อความว่าง
+    if (!message || message.trim() === "") return;
 
-    // 3. (Optional) เพิ่มรหัสยืนยันชั้นที่ 2 ป้องกันมือลั่น
     const adminPin = prompt("🔒 กรุณาใส่รหัส Admin เพื่อยืนยันการส่ง:");
     if (adminPin !== "00189") {
       alert("❌ รหัสผิดพลาด ยกเลิกการส่ง");
       return;
     }
 
-    // 4. ยืนยันครั้งสุดท้าย
     if (!confirm(`ยืนยันส่งข้อความนี้ให้สมาชิกทุกคน?\n\n"${message}"`)) return;
 
     setIsLoading(true);
     try {
       const response = await fetch('https://classfund-web.onrender.com/api/broadcast', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: message.trim(),
-          pin: adminPin // ส่ง PIN ไปเช็คที่หลังบ้านด้วยก็ได้
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message.trim(), pin: adminPin })
       });
 
       if (response.ok) {
         alert('✅ ส่งประกาศสำเร็จเรียบร้อย');
       } else {
-        // กรณีหลังบ้านตอบกลับมาว่า Error (เช่น 401 Unauthorized)
         const errorData = await response.json();
         alert(`❌ ส่งไม่สำเร็จ: ${errorData.message || 'เกิดข้อผิดพลาด'}`);
       }
-
     } catch (e) {
       console.error(e);
       alert('❌ Error: ไม่สามารถเชื่อมต่อ Server ได้');
@@ -172,26 +169,17 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-  // ✅ แก้ไข: ปิดหน้าต่างทันทีที่บันทึกเสร็จ (แก้ปัญหาค้าง)
   const handleAddTransaction = async (tx1: any, tx2?: any) => {
     try {
-      // 1. บันทึกรายการแรก
       await api.addTransaction(tx1);
-
-      // 2. ถ้ามีรายการที่สอง (ล้าง Hash ออกเพื่อไม่ให้ซ้ำ)
       if (tx2) {
         const safeTx2 = { ...tx2, slipHash: undefined };
         await api.addTransaction(safeTx2);
       }
-
-      // 3. ปิดหน้าต่างทันที
       setShowForm(false);
       setFormDefaults(undefined);
       alert("✅ บันทึกรายการเรียบร้อย");
-
-      // 4. โหลดข้อมูลใหม่เบื้องหลัง
       await refreshData();
-
     } catch (error: any) {
       console.error(error);
       alert("เกิดข้อผิดพลาด: " + error.message);
@@ -212,7 +200,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     const file = e.target.files?.[0]; if (file) { const r = new FileReader(); r.onloadend = async () => { const u = { ...currentClassroom, paymentQrCode: r.result as string }; await api.updateClassroom(u); setCurrentClassroom(u); }; r.readAsDataURL(file); }
   };
 
-  // --- Helper Functions ---
   const computeSHA256 = async (file: File) => {
     const buffer = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
@@ -220,7 +207,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // ✅ แก้ไข: เพิ่มการเช็ค res.ok เพื่อให้จับ Error Cloudinary ได้แม่นยำขึ้น
   const uploadToCloudinary = async (file: File): Promise<string | null> => {
     const formData = new FormData();
     formData.append("file", file);
@@ -229,12 +215,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
         method: "POST", body: formData
       });
-
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`Cloudinary Error (${res.status}): ${errorText}`);
       }
-
       const data = await res.json();
       return data.secure_url;
     } catch (error) {
@@ -243,7 +227,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-  // 🔥🔥🔥 Logic แก้ไขใหม่: Fail-Safe (AI พัง ก็ยังอัปโหลดรูปได้) 🔥🔥🔥
   const handleSlipSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -255,7 +238,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       setAiStatus('idle');
       setPaySlip(null);
 
-      // 1. เช็คสลิปซ้ำ
       try {
         const hash = await computeSHA256(file);
         const check = await api.checkSlipDuplicate(hash);
@@ -274,23 +256,15 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       reader.onloadend = async () => {
         const base64 = reader.result as string;
         try {
-          // ✅ Step 1: อัปโหลดรูปก่อนเลย (สำคัญที่สุด)
-          // แยกออกมาจาก Promise.all เพื่อไม่ให้ AI Error มาขัดขวางการอัปโหลด
           const cloudinaryUrl = await uploadToCloudinary(file);
+          if (!cloudinaryUrl) throw new Error("อัปโหลดรูปไม่สำเร็จ");
 
-          if (!cloudinaryUrl) {
-            throw new Error("อัปโหลดรูปไม่สำเร็จ (กรุณาลองใหม่)");
-          }
-
-          // อัปโหลดผ่าน -> โชว์รูปทันที
           setPaySlip(cloudinaryUrl);
           setUploadProgress(100);
-
-          // ✅ Step 2: ค่อยเรียก AI (ใส่ try/catch แยก)
           setAiMessage("กำลังตรวจสอบยอดเงิน...");
+          
           try {
             const aiResult = await analyzeSlip(base64);
-
             if (aiResult.isValid) {
               setAiStatus('success');
               if (aiResult.amount && aiResult.amount > 0) {
@@ -300,18 +274,15 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 setAiMessage("⚠️ AI อ่านยอดไม่ได้ (กรุณากรอกเอง)");
               }
             } else {
-              // AI บอกว่ารูปผิดปกติ แต่เราแค่เตือน (ไม่ลบรูป)
               console.warn("AI Invalid:", aiResult.message);
               setAiMessage("⚠️ รูปอาจไม่ชัดเจน (กรอกยอดเองได้เลย)");
               setAiStatus('success');
             }
           } catch (aiError) {
-            // ถ้า AI พัง (429 Quota Exceeded) ให้ลงมาตรงนี้
             console.warn("AI Quota Error (Ignored):", aiError);
             setAiMessage("⚠️ AI ไม่ว่าง (กรอกยอดเองได้เลย)");
-            setAiStatus('success'); // ยอมให้ผ่าน
+            setAiStatus('success');
           }
-
         } catch (error: any) {
           console.error("Critical Error:", error);
           setAiMessage("❌ อัปโหลดล้มเหลว");
@@ -326,26 +297,16 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-
   const handleQuickTagClick = (tagName: string) => {
-    // 1. ตรวจสอบจากค่าปัจจุบันใน State โดยตรง
     const isSelected = selectedTags.includes(tagName);
-
     let newTags;
-
     if (isSelected) {
-      // ถ้ามีแล้ว -> เอาออก
       newTags = selectedTags.filter(t => t !== tagName);
     } else {
-      // ถ้าไม่มี -> เพิ่มเข้าไป
       newTags = [...selectedTags, tagName];
     }
-
-    // 2. อัปเดต State ทั้งสองอย่างพร้อมกันทันที (ไม่ต้องรอ useEffect)
     setSelectedTags(newTags);
     setPayNote(newTags.join(', '));
-
-    // ❌ ไม่แตะต้อง setPayAmount (ตามที่ขอ)
   };
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
@@ -363,10 +324,8 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         classroomId: currentClassroom.id,
         type: TransactionType.DEPOSIT,
         amount: parseFloat(payAmount),
-
-        period: payNote, // ใช้ Note เป็นชื่อรายการ
+        period: payNote,
         note: payNote,
-
         slipImage: paySlip || undefined,
         slipHash: paySlipHash,
         status: status,
@@ -376,9 +335,8 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       await api.addTransaction(txData);
       alert(isAdmin ? "✅ บันทึกยอดเงินเรียบร้อย (อนุมัติทันที)" : "✅ แจ้งโอนเงินสำเร็จ! รอผู้ดูแลตรวจสอบครับ");
 
-      // Reset Form
       setPayAmount(''); setPayPeriod(''); setPaySlip(null); setPayNote('');
-      setAiMessage(''); setAiStatus('idle'); setPaySlipHash(''); setSelectedTags([]); // ล้าง Tags
+      setAiMessage(''); setAiStatus('idle'); setPaySlipHash(''); setSelectedTags([]);
 
       if (isAdmin) { setActiveMainTab('home'); setSubTab('HISTORY'); } else { setActiveMainTab('home'); setSubTab('PENDING'); }
       refreshData();
@@ -389,7 +347,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     }
   };
 
-  // Mobile Action Handlers
   const handleMobileApprove = async () => {
     if (!selectedTx) return;
     try {
@@ -427,7 +384,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       const statusCols = periods.map(p => {
         const paidTxs = transactions.filter(t => t.userId === u._id && t.period === p && t.status === TransactionStatus.APPROVED);
         if (paidTxs.length > 0) {
-          const sum = api.calculateBalance(paidTxs, undefined, 'NET');          studentTotal += sum;
+          const sum = api.calculateBalance(paidTxs, undefined, 'NET'); studentTotal += sum;
           return sum.toLocaleString();
         }
         return '-';
@@ -494,8 +451,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
             amount: a1,
             approver: user.name
           });
-
-          // 2. ถ้ามีรายการที่ 2 (p2) ให้สร้างใหม่
           if (p2 && (a2 || 0) > 0) {
             const org = transactions.find(t => t._id === id);
             if (org) {
@@ -532,7 +487,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden relative flex flex-col mt-8">
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
 
-            {/* 1. QR Code */}
+            {/* QR Code */}
             <div className="p-6 text-center border-b border-gray-100 bg-emerald-50/30">
               <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-2">QR รับเงินกองกลาง</p>
               <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 inline-block relative group">
@@ -550,7 +505,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               <p className="text-[10px] text-gray-400 mt-2">บัญชี: เงินห้อง DIT #67</p>
             </div>
 
-            {/* 2. Form */}
+            {/* Form */}
             <form onSubmit={handleSubmitPayment} className="p-6 flex flex-col gap-4">
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-sm">2</div>
@@ -570,7 +525,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 />
               </div>
 
-              {/* 🔥 AI Upload Section 🔥 */}
+              {/* AI Upload Section */}
               <div>
                 <label className="text-xs font-bold text-gray-500 ml-1 flex justify-between">
                   <span>หลักฐาน (สลิป)</span>
@@ -611,18 +566,18 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 <label className="text-xs font-bold text-gray-500 ml-1">หมายเหตุ <span className="text-red-500">*</span></label>
                 <input required type="text" placeholder="เช่น ค่าเสื้อ, ค่าห้องเดือน ส.ค." value={payNote} onChange={(e) => setPayNote(e.target.value)} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-400" />
 
-                {/* 🔥 Multi-Select Tags (กดได้หลายอัน) 🔥 */}
+                {/* Multi-Select Tags */}
                 {periods.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-3">
                     {periods.map(p => (
                       <button
                         key={p}
-                        type="button" // ✅ ใส่ type="button" สำคัญมาก!
+                        type="button"
                         onClick={() => handleQuickTagClick(p)}
                         className={`px-3 py-1.5 text-[10px] font-bold rounded-full transition-all active:scale-95 border
                                     ${selectedTags.includes(p)
-                            ? 'bg-emerald-500 text-white border-emerald-500 shadow-md transform scale-105' // Active (Selected)
-                            : 'bg-gray-100 text-gray-500 border-gray-100 hover:bg-emerald-50 hover:text-emerald-600' // Inactive
+                            ? 'bg-emerald-500 text-white border-emerald-500 shadow-md transform scale-105'
+                            : 'bg-gray-100 text-gray-500 border-gray-100 hover:bg-emerald-50 hover:text-emerald-600'
                           }`}
                       >
                         {selectedTags.includes(p) ? '✓ ' : '+ '}
@@ -641,20 +596,47 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         </div>
       )}
 
+      {/* --- ✅ PAGE: LOCKED SCREEN (หน้าแจ้งเตือนปิดระบบ) --- */}
+      {activeMainTab === 'locked' && (
+        <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col items-center justify-center p-6 animate-fade-in text-center">
+            
+            <div className="relative mb-8">
+                <div className="absolute inset-0 bg-red-500 blur-3xl opacity-20 rounded-full animate-pulse"></div>
+                <div className="w-40 h-40 bg-white rounded-full flex items-center justify-center relative z-10 shadow-2xl shadow-slate-200 border-8 border-slate-50">
+                    <Lock size={80} className="text-slate-300" />
+                    <div className="absolute top-0 right-0 bg-red-500 w-12 h-12 rounded-full flex items-center justify-center border-4 border-white shadow-lg animate-bounce">
+                        <X size={24} className="text-white" />
+                    </div>
+                </div>
+            </div>
+
+            <h2 className="text-4xl font-black text-slate-800 mb-2 tracking-tight">พักก่อนวัยรุ่น! 🛑</h2>
+            <p className="text-slate-500 mb-10 text-lg leading-relaxed max-w-xs mx-auto">
+                ตอนนี้ระบบ <span className="text-red-500 font-bold bg-red-50 px-2 py-1 rounded-lg">ปิดรับยอด</span> ชั่วคราว<br/>
+                ผู้ดูแลอาจจะกำลังเช็คบัญชีอยู่<br/>
+                ไว้มาใหม่นะจ๊ะ...
+            </p>
+
+            <button 
+                onClick={() => setActiveMainTab('home')} 
+                className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-xl shadow-slate-300 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+            >
+                <span>รับทราบครับผม</span>
+            </button>
+        </div>
+      )}
+
       {/* --- PAGE: HOME --- */}
       {activeMainTab === 'home' && (
         <main className="max-w-5xl mx-auto px-4 pt-4 pb-24 md:p-8 space-y-6 animate-fade-in">
 
-          {/* --- Profile & Gamification Section --- */}
+          {/* Profile & Gamification Section */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-
-            {/* Background Decoration */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
 
             <div className="flex-1 relative z-10">
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-2xl font-bold text-gray-800">สวัสดี, {user.name} 👋</h1>
-                {/* แสดง Level Badge */}
                 {!isAdmin && (
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1 ${calculateLevel(api.calculateBalance(transactions, user._id)).color}`}>
                     <Trophy size={12} /> LV.{calculateLevel(api.calculateBalance(transactions, user._id)).level}
@@ -666,12 +648,11 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 <p className="text-gray-500 text-sm">ยินดีต้อนรับผู้ดูแลระบบ</p>
               ) : (
                 <>
-                  {/* หลอด EXP */}
+                  {/* EXP Bar */}
                   {(() => {
                     const balance = api.calculateBalance(transactions, user._id);
                     const userLevel = calculateLevel(balance);
                     const currentXp = balance * 10;
-                    // คำนวณ % หลอด (คิดแบบง่ายๆ เทียบกับ nextXp)
                     const progress = Math.min((currentXp / userLevel.nextXp) * 100, 100);
 
                     return (
@@ -702,7 +683,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               )}
             </div>
 
-            {/* กล่องแสดงยอดเงิน (ขยับมาขวาเหมือนเดิม) */}
+            {/* Money Box */}
             <div className="flex items-center gap-6 mt-2 md:mt-0 relative z-10 bg-white/50 backdrop-blur-sm p-2 rounded-2xl">
               {!isAdmin && (
                 <>
@@ -773,12 +754,50 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
             </div>
           )}
 
+          {/* ✅ ปุ่มเปิด-ปิดรับเงินสำหรับ Admin */}
+          {isAdmin && (
+            <button
+              onClick={handleTogglePaymentSystem}
+              className={`ml-2 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm border
+                ${currentClassroom.isPaymentActive
+                  ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'
+                  : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
+                }`}
+            >
+              <div className={`w-2 h-2 rounded-full ${currentClassroom.isPaymentActive ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+              {currentClassroom.isPaymentActive ? 'ปิดรับเงิน' : 'เปิดรับเงิน'}
+            </button>
+          )}
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {!isAdmin && (
-              <button onClick={() => setActiveMainTab('scan')} className="col-span-2 bg-emerald-500 hover:bg-emerald-600 text-white p-4 rounded-2xl shadow-lg shadow-emerald-200 flex items-center justify-between group transition-all">
-                <div className="text-left"><p className="font-bold text-lg">แจ้งฝากเงิน</p><p className="text-emerald-100 text-xs">คลิกเพื่อสแกนและแนบสลิป</p></div>
-                <div className="bg-white/20 w-10 h-10 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                  <MousePointerClick size={24} className="text-white" />
+              <button 
+                // ✅ Logic สลับหน้า: ถ้าเปิดไป scan ถ้าปิดไป locked
+                onClick={() => setActiveMainTab(currentClassroom.isPaymentActive ? 'scan' : 'locked')} 
+                className={`col-span-2 p-5 rounded-3xl shadow-lg flex items-center justify-between group transition-all relative overflow-hidden
+                  ${currentClassroom.isPaymentActive 
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-200 cursor-pointer' 
+                    : 'bg-slate-800 text-slate-400 shadow-slate-300 cursor-pointer' 
+                  }`}
+              >
+                {!currentClassroom.isPaymentActive && (
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                )}
+
+                <div className="text-left relative z-10">
+                  <p className="font-bold text-xl mb-1">
+                    {currentClassroom.isPaymentActive ? 'แจ้งฝากเงิน' : 'SYSTEM OFFLINE'}
+                  </p>
+                  <p className={`text-xs ${currentClassroom.isPaymentActive ? 'text-emerald-100' : 'text-slate-500'}`}>
+                    {currentClassroom.isPaymentActive ? 'คลิกเพื่อสแกนและแนบสลิป' : 'ระบบปิดรับยอดชั่วคราว'}
+                  </p>
+                </div>
+                
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl transition-all duration-500
+                   ${currentClassroom.isPaymentActive 
+                      ? 'bg-white/20 group-hover:scale-110 group-hover:rotate-12' 
+                      : 'bg-slate-700/50 group-hover:text-red-500'}`}>
+                   {currentClassroom.isPaymentActive ? <MousePointerClick size={28} /> : <ShieldAlert size={28}/>}
                 </div>
               </button>
             )}
@@ -827,7 +846,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         </main>
       )}
 
-      {/* MOBILE ACTION SHEET (สำหรับ Admin) */}
+      {/* MOBILE ACTION SHEET */}
       {selectedTx && (
         <div className="fixed inset-0 bg-black/50 z-[70] flex flex-col justify-end animate-fade-in" onClick={() => setSelectedTx(null)}>
           <div className="bg-white rounded-t-3xl p-6 shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>

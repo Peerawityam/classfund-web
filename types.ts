@@ -51,6 +51,7 @@ export interface Classroom {
   paymentQrCode?: string;
   announcement?: string;
   announcementDate?: string;
+  isPaymentActive?: boolean;
 }
 
 export interface AppState {

@@ -5,6 +5,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import { v2 as cloudinary } from 'cloudinary'; 
 
+
 const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
@@ -71,7 +72,8 @@ const ClassroomSchema = new mongoose.Schema({
   monthlyFee: { type: Number, default: 20 },
   activePeriods: [String],
   periodAmounts: { type: Map, of: Number }, // จุดสำคัญ: เก็บราคารอบ
-  paymentQrCode: String
+  paymentQrCode: String,
+  isPaymentActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
 const User = mongoose.model('User', UserSchema);
