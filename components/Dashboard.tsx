@@ -20,7 +20,7 @@ const CLOUDINARY_UPLOAD_PRESET = "classfund_preset";
 const calculateLevel = (totalPaid: number) => {
   const xp = totalPaid * 10;
   if (xp < 1000) return { level: 1, title: 'เด็กใหม่ 🐣', nextXp: 1000, color: 'bg-gray-400' };
-  if (xp < 4000) return { level: 2, title: 'ผู้ช่วยห้อง 🥉', nextXp: 4000, color: 'bg-amber-600' };
+  if (xp < 5000) return { level: 2, title: 'ผู้ช่วยห้อง 🥉', nextXp: 5000, color: 'bg-amber-600' };
   if (xp < 8000) return { level: 3, title: 'เศรษฐีประจำห้อง 🥈', nextXp: 8000, color: 'bg-slate-400' };
   if (xp < 12000) return { level: 4, title: 'ป๋าเปย์ตัวจริง 🥇', nextXp: 12000, color: 'bg-yellow-400' };
   return { level: 5, title: 'ตำนานแห่ง ClassFund 💎', nextXp: 15000, color: 'bg-rose-500' };
@@ -262,7 +262,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           setPaySlip(cloudinaryUrl);
           setUploadProgress(100);
           setAiMessage("กำลังตรวจสอบยอดเงิน...");
-          
+
           try {
             const aiResult = await analyzeSlip(base64);
             if (aiResult.isValid) {
@@ -599,36 +599,98 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       {/* --- ✅ PAGE: LOCKED SCREEN (หน้าแจ้งเตือนปิดระบบ) --- */}
       {activeMainTab === 'locked' && (
         <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col items-center justify-center p-6 animate-fade-in text-center">
-            
-            <div className="relative mb-8">
-                <div className="absolute inset-0 bg-red-500 blur-3xl opacity-20 rounded-full animate-pulse"></div>
-                <div className="w-40 h-40 bg-white rounded-full flex items-center justify-center relative z-10 shadow-2xl shadow-slate-200 border-8 border-slate-50">
-                    <Lock size={80} className="text-slate-300" />
-                    <div className="absolute top-0 right-0 bg-red-500 w-12 h-12 rounded-full flex items-center justify-center border-4 border-white shadow-lg animate-bounce">
-                        <X size={24} className="text-white" />
-                    </div>
-                </div>
+
+          <div className="relative mb-8">
+            <div className="absolute inset-0 bg-red-500 blur-3xl opacity-20 rounded-full animate-pulse"></div>
+            <div className="w-40 h-40 bg-white rounded-full flex items-center justify-center relative z-10 shadow-2xl shadow-slate-200 border-8 border-slate-50">
+              <Lock size={80} className="text-slate-300" />
+              <div className="absolute top-0 right-0 bg-red-500 w-12 h-12 rounded-full flex items-center justify-center border-4 border-white shadow-lg animate-bounce">
+                <X size={24} className="text-white" />
+              </div>
             </div>
+          </div>
 
-            <h2 className="text-4xl font-black text-slate-800 mb-2 tracking-tight">พักก่อนวัยรุ่น! 🛑</h2>
-            <p className="text-slate-500 mb-10 text-lg leading-relaxed max-w-xs mx-auto">
-                ตอนนี้ระบบ <span className="text-red-500 font-bold bg-red-50 px-2 py-1 rounded-lg">ปิดรับยอด</span> ชั่วคราว<br/>
-                ผู้ดูแลอาจจะกำลังเช็คบัญชีอยู่<br/>
-                ไว้มาใหม่นะจ๊ะ...
-            </p>
+          <h2 className="text-4xl font-black text-slate-800 mb-2 tracking-tight">พักก่อนวัยรุ่น! 🛑</h2>
+          <p className="text-slate-500 mb-10 text-lg leading-relaxed max-w-xs mx-auto">
+            ตอนนี้ระบบ <span className="text-red-500 font-bold bg-red-50 px-2 py-1 rounded-lg">ปิดรับยอด</span> ชั่วคราว<br />
+            ผู้ดูแลอาจจะกำลังเช็คบัญชีอยู่<br />
+            ไว้มาใหม่นะจ๊ะ...
+          </p>
 
-            <button 
-                onClick={() => setActiveMainTab('home')} 
-                className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-xl shadow-slate-300 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
-            >
-                <span>รับทราบครับผม</span>
-            </button>
+          <button
+            onClick={() => setActiveMainTab('home')}
+            className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-xl shadow-slate-300 hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+          >
+            <span>รับทราบครับผม</span>
+          </button>
         </div>
       )}
 
       {/* --- PAGE: HOME --- */}
       {activeMainTab === 'home' && (
         <main className="max-w-5xl mx-auto px-4 pt-4 pb-24 md:p-8 space-y-6 animate-fade-in">
+          {/* 🔥 ส่วนประกาศแบบใหม่: Soft & Clean (สีอ่อน สบายตา) */}
+          {(isAdmin || currentClassroom.announcement) && (
+            <div className={`w-full rounded-2xl px-4 py-3 flex items-start gap-3 transition-all
+                ${currentClassroom.announcement 
+                    ? 'bg-indigo-50/80 border border-indigo-200 shadow-sm' // ✅ สีม่วงอ่อน เส้นขอบบางๆ
+                    : 'bg-gray-50 border border-gray-200 text-gray-400'
+                }`}>
+                
+                {/* ไอคอนลำโพง (พื้นขาวให้ดูเด้งขึ้นมานิดนึง) */}
+                <div className="bg-white text-indigo-600 p-1.5 rounded-lg shadow-sm shrink-0 mt-0.5 border border-indigo-100">
+                    📢
+                </div>
+
+                {/* เนื้อหา */}
+                <div className="flex-1 min-w-0 py-0.5">
+                    {isEditingAnnounce ? (
+                         <div className="flex flex-col gap-2">
+                            <textarea 
+                                className="w-full px-3 py-2 rounded-lg text-slate-700 text-sm border border-indigo-200 outline-none resize-none focus:ring-2 focus:ring-indigo-100 bg-white" 
+                                rows={2}
+                                value={announceText} 
+                                onChange={(e) => setAnnounceText(e.target.value)}
+                                placeholder="พิมพ์ประกาศ..."
+                                autoFocus
+                            />
+                            <div className="flex gap-2 justify-end">
+                                <button onClick={() => setIsEditingAnnounce(false)} className="text-slate-400 text-xs px-2 hover:text-slate-600">ยกเลิก</button>
+                                <button onClick={handleSaveAnnouncement} className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-xs font-bold shadow-md shadow-indigo-200">บันทึก</button>
+                            </div>
+                         </div>
+                    ) : (
+                        <div className="flex flex-col gap-1">
+                            {/* ✅ ตัวหนังสือสีเทาเข้ม อ่านง่าย สบายตากว่า */}
+                            <p className="text-sm font-medium leading-relaxed break-words text-slate-700">
+                                {currentClassroom.announcement || "ไม่มีประกาศใหม่"}
+                            </p>
+                            
+                            {/* วันที่ (ป้ายสีขาว) */}
+                            {currentClassroom.announcementDate && currentClassroom.announcement && (
+                                <div className="flex items-center gap-1 mt-1">
+                                    <span className="text-[10px] bg-white text-indigo-500 px-2 py-0.5 rounded-full border border-indigo-100 font-bold">
+                                        🕒 {new Date(currentClassroom.announcementDate).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'2-digit'})}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* ปุ่ม Admin (ปุ่มขาว คลีนๆ) */}
+                {isAdmin && !isEditingAnnounce && (
+                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                        <button onClick={handleLineBroadcast} className="p-1.5 rounded-lg bg-white border border-indigo-100 text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm" title="ส่งไลน์">
+                            <span className="hidden md:inline text-xs font-bold ml-1">Line</span>
+                        </button>
+                        <button onClick={() => setIsEditingAnnounce(true)} className="p-1.5 rounded-lg bg-white border border-indigo-100 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm" title="แก้ไข">
+                            ✏️
+                        </button>
+                    </div>
+                )}
+            </div>
+          )}
 
           {/* Profile & Gamification Section */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
@@ -701,87 +763,21 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
             </div>
           </div>
 
-          {(isAdmin || currentClassroom.announcement) && (
-            <div className={`p-6 rounded-3xl shadow-sm border overflow-hidden transition-all duration-300 relative ${currentClassroom.announcement
-              ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-transparent'
-              : 'bg-white border-dashed border-gray-300'
-              }`}>
 
-              {currentClassroom.announcement && (
-                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-              )}
-
-              <div className="flex justify-between items-start relative z-10">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="bg-white/20 p-1.5 rounded-lg backdrop-blur-sm">📢</span>
-                    <h3 className={`font-bold ${currentClassroom.announcement ? 'text-white' : 'text-gray-400'}`}>
-                      ประกาศจากผู้ดูแล
-                    </h3>
-                    {currentClassroom.announcementDate && currentClassroom.announcement && (
-                      <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full text-white/90">
-                        {new Date(currentClassroom.announcementDate).toLocaleDateString('th-TH')}
-                      </span>
-                    )}
-                  </div>
-
-                  {isEditingAnnounce ? (
-                    <div className="mt-2 animate-fade-in">
-                      <textarea className="w-full p-3 rounded-xl text-gray-800 text-sm border-2 border-indigo-200 focus:ring-2 focus:ring-indigo-400 outline-none resize-none" rows={3} placeholder="พิมพ์ข้อความประกาศ..." value={announceText} onChange={(e) => setAnnounceText(e.target.value)} autoFocus />
-                      <div className="flex gap-2 mt-2 justify-end">
-                        <button onClick={() => setIsEditingAnnounce(false)} className="text-xs text-white/80 hover:text-white px-3 py-2">ยกเลิก</button>
-                        <button onClick={handleSaveAnnouncement} className="bg-white text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-gray-100 shadow-lg">บันทึก</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className={`text-sm leading-relaxed whitespace-pre-line ${currentClassroom.announcement ? 'text-white/95' : 'text-gray-400 italic'}`}>
-                      {currentClassroom.announcement || "ยังไม่มีประกาศใหม่ (กดปุ่มแก้ไขเพื่อเพิ่มประกาศ)"}
-                    </p>
-                  )}
-                </div>
-
-                {isAdmin && !isEditingAnnounce && (
-                  <div className="flex flex-col gap-2 ml-4">
-                    <button onClick={handleLineBroadcast} className="bg-[#06C755] hover:bg-[#05b34c] text-white px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-[#06C755]/20 border border-transparent">
-                      ประกาศ LINE
-                    </button>
-                    <button onClick={() => setIsEditingAnnounce(true)} className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-xl transition-all flex items-center justify-center backdrop-blur-md border border-white/20">
-                      แก้ไข
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ✅ ปุ่มเปิด-ปิดรับเงินสำหรับ Admin */}
-          {isAdmin && (
-            <button
-              onClick={handleTogglePaymentSystem}
-              className={`ml-2 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm border
-                ${currentClassroom.isPaymentActive
-                  ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'
-                  : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'
-                }`}
-            >
-              <div className={`w-2 h-2 rounded-full ${currentClassroom.isPaymentActive ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-              {currentClassroom.isPaymentActive ? 'ปิดรับเงิน' : 'เปิดรับเงิน'}
-            </button>
-          )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {!isAdmin && (
-              <button 
+              <button
                 // ✅ Logic สลับหน้า: ถ้าเปิดไป scan ถ้าปิดไป locked
-                onClick={() => setActiveMainTab(currentClassroom.isPaymentActive ? 'scan' : 'locked')} 
+                onClick={() => setActiveMainTab(currentClassroom.isPaymentActive ? 'scan' : 'locked')}
                 className={`col-span-2 p-5 rounded-3xl shadow-lg flex items-center justify-between group transition-all relative overflow-hidden
-                  ${currentClassroom.isPaymentActive 
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-200 cursor-pointer' 
-                    : 'bg-slate-800 text-slate-400 shadow-slate-300 cursor-pointer' 
+                  ${currentClassroom.isPaymentActive
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-200 cursor-pointer'
+                    : 'bg-slate-800 text-slate-400 shadow-slate-300 cursor-pointer'
                   }`}
               >
                 {!currentClassroom.isPaymentActive && (
-                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                  <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]"></div>
                 )}
 
                 <div className="text-left relative z-10">
@@ -792,27 +788,50 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                     {currentClassroom.isPaymentActive ? 'คลิกเพื่อสแกนและแนบสลิป' : 'ระบบปิดรับยอดชั่วคราว'}
                   </p>
                 </div>
-                
+
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl transition-all duration-500
-                   ${currentClassroom.isPaymentActive 
-                      ? 'bg-white/20 group-hover:scale-110 group-hover:rotate-12' 
-                      : 'bg-slate-700/50 group-hover:text-red-500'}`}>
-                   {currentClassroom.isPaymentActive ? <MousePointerClick size={28} /> : <ShieldAlert size={28}/>}
+                   ${currentClassroom.isPaymentActive
+                    ? 'bg-white/20 group-hover:scale-110 group-hover:rotate-12'
+                    : 'bg-slate-700/50 group-hover:text-red-500'}`}>
+                  {currentClassroom.isPaymentActive ? <MousePointerClick size={28} /> : <ShieldAlert size={28} />}
                 </div>
               </button>
             )}
 
             {isAdmin && (
               <>
+                {/* 1. ปุ่มรอตรวจสอบ (คงเดิม) */}
                 <div onClick={() => setSubTab('PENDING')} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:border-amber-200 transition-colors">
                   <p className="text-gray-400 text-[10px] uppercase font-bold">รอตรวจสอบ</p>
                   <p className="text-3xl font-bold text-amber-500">{pendingCount}</p>
                 </div>
+
+                {/* 2. ปุ่มจัดการสมาชิก (คงเดิม) */}
                 <div onClick={() => setShowUserMgmt(true)} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 cursor-pointer hover:border-indigo-200 transition-colors flex flex-col justify-center items-center gap-1 text-indigo-500">
                   <span className="text-2xl">👥</span><span className="text-xs font-bold">จัดการสมาชิก</span>
                 </div>
-                <div onClick={() => setShowForm(true)} className="col-span-2 md:col-span-2 bg-indigo-600 text-white p-4 rounded-2xl shadow-lg cursor-pointer flex items-center justify-between hover:bg-indigo-700 transition-all">
-                  <div><p className="font-bold">บันทึกรายรับ</p><p className="text-indigo-200 text-xs">สร้างรายการด้วยตัวเอง</p></div><PlusCircle size={28} />
+
+                {/* 🔥 3. ปุ่มใหม่: เปิด-ปิดระบบ (เสียบตรงนี้) */}
+                <button
+                  onClick={handleTogglePaymentSystem}
+                  className={`p-4 rounded-2xl shadow-sm border cursor-pointer transition-all flex flex-col justify-center items-center gap-1 group
+                        ${currentClassroom.isPaymentActive
+                      ? 'bg-white border-emerald-100 hover:border-emerald-300'
+                      : 'bg-red-50 border-red-200 hover:bg-red-100'
+                    }`}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg transition-transform group-hover:scale-110 ${currentClassroom.isPaymentActive ? 'bg-emerald-100 text-emerald-600' : 'bg-red-200 text-red-600'}`}>
+                    {currentClassroom.isPaymentActive ? <CheckCircle size={18} /> : <Lock size={18} />}
+                  </div>
+                  <span className={`text-xs font-bold ${currentClassroom.isPaymentActive ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {currentClassroom.isPaymentActive ? 'กำลังเปิดรับยอดอยู่' : 'ปิดรับเงิน'}
+                  </span>
+                </button>
+
+                {/* 4. ปุ่มบันทึกรายรับ (ปรับขนาดให้เล็กลง เหลือ 1 ช่อง เพื่อให้เข้าพวก) */}
+                <div onClick={() => setShowForm(true)} className="bg-indigo-600 text-white p-4 rounded-2xl shadow-lg cursor-pointer flex flex-col justify-center items-center gap-1 hover:bg-indigo-700 transition-all">
+                  <PlusCircle size={24} />
+                  <p className="font-bold text-xs">บันทึกรายรับ</p>
                 </div>
               </>
             )}
