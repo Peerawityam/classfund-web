@@ -71,7 +71,7 @@ const ClassroomSchema = new mongoose.Schema({
   announcementDate: { type: Date, default: Date.now },
   monthlyFee: { type: Number, default: 20 },
   activePeriods: [String],
-  periodAmounts: { type: Map, of: Number }, // จุดสำคัญ: เก็บราคารอบ
+  periodAmounts: { type: Map, of: Number },
   paymentQrCode: String,
   isPaymentActive: { type: Boolean, default: true },
 }, { timestamps: true });
@@ -100,11 +100,15 @@ app.get('/api/init-classroom', async (req, res) => {
 
 app.patch('/api/classroom', async (req, res) => {
   try {
+    console.log("📥 Received Update:", req.body);
     if (req.body.paymentQrCode && req.body.paymentQrCode.startsWith('data:image')) {
         const uploadRes = await cloudinary.uploader.upload(req.body.paymentQrCode, { folder: 'classfund_settings' });
         req.body.paymentQrCode = uploadRes.secure_url;
     }
     const updated = await Classroom.findOneAndUpdate({ id: 'MAIN' }, req.body, { new: true });
+
+    console.log("✅ Updated Result:", updated);
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: err.message });
