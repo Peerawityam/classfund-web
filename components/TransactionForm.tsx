@@ -2,6 +2,110 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Transaction, TransactionType, TransactionStatus, UserRole, User, Classroom } from '../types';
 import { analyzeSlip, SlipAnalysisResult } from '../services/geminiService';
 import * as api from '../services/apiService';
+import { Search, ChevronDown, Check } from 'lucide-react'; // ✅ เพิ่ม import ไอคอน
+
+// ----------------------------------------------------------------------
+// 🔥 COMPONENT: Dropdown ค้นหาได้ (Searchable Select)
+// ----------------------------------------------------------------------
+interface Option { label: string; value: string; }
+
+const SearchableSelect = ({ 
+  options, 
+  value, 
+  onChange, 
+  placeholder = "เลือกรายการ...",
+  disabled = false
+}: { 
+  options: Option[], 
+  value: string, 
+  onChange: (val: string) => void, 
+  placeholder?: string,
+  disabled?: boolean
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // กรองรายการตามคำค้นหา
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selectedLabel = options.find(o => o.value === value)?.label;
+
+  // ปิดเมื่อคลิกข้างนอก
+  useEffect(() => {
+    function handleClickOutside(event: any) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) setIsOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [wrapperRef]);
+
+  // เมื่อเลือกรายการ
+  const handleSelect = (val: string) => {
+    onChange(val);
+    setIsOpen(false);
+    setSearch('');
+  };
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      {/* ปุ่มกดเปิด Dropdown */}
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border rounded-xl flex justify-between items-center bg-white transition-all
+            ${disabled ? 'bg-gray-100 cursor-not-allowed text-gray-400' : 'cursor-pointer hover:border-indigo-400'}
+            ${isOpen ? 'ring-2 ring-indigo-200 border-indigo-400' : 'border-gray-200'}
+        `}
+      >
+        <span className={`text-sm ${selectedLabel ? "text-gray-800 font-medium" : "text-gray-400"}`}>
+          {selectedLabel || placeholder}
+        </span>
+        <ChevronDown size={16} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+
+      {/* กล่องรายชื่อ (โผล่มาเมื่อกดเปิด) */}
+      {isOpen && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden animate-fade-in-up">
+            {/* ช่องค้นหา (Sticky) */}
+            <div className="p-2 border-b border-gray-50 bg-gray-50/50 sticky top-0">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                    <input 
+                        autoFocus
+                        className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:border-indigo-400 placeholder:text-gray-300"
+                        placeholder="พิมพ์เพื่อค้นหา..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            {/* รายการตัวเลือก */}
+            <div className="max-h-60 overflow-y-auto">
+                {filtered.length > 0 ? (
+                    filtered.map(opt => (
+                        <div 
+                            key={opt.value}
+                            onClick={() => handleSelect(opt.value)}
+                            className={`px-4 py-3 text-sm cursor-pointer transition-colors border-b border-gray-50 last:border-0 flex justify-between items-center
+                                ${value === opt.value ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-600 hover:bg-gray-50'}`}
+                        >
+                            <span>{opt.label}</span>
+                            {value === opt.value && <Check size={14} />}
+                        </div>
+                    ))
+                ) : (
+                    <div className="p-4 text-center text-xs text-gray-400">ไม่พบข้อมูล "{search}"</div>
+                )}
+            </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ----------------------------------------------------------------------
+// MAIN COMPONENT
+// ----------------------------------------------------------------------
 
 interface Props {
   classroom: Classroom;
@@ -35,7 +139,6 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
   const [studentName, setStudentName] = useState(defaultValues?.studentName || currentUserName);
   const [targetUserId, setTargetUserId] = useState<string | undefined>(defaultValues?.userId || (userRole === UserRole.STUDENT ? currentUserId : undefined));
   
-  // ✅ แก้ไข: slipImage เป็น optional (undefined) ได้
   const [slipImage, setSlipImage] = useState<string | undefined>(undefined);
   const [slipHash, setSlipHash] = useState<string>('');
   
@@ -48,6 +151,12 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
   const isAdmin = userRole === UserRole.ADMIN;
   const isStudent = userRole === UserRole.STUDENT;
   const studentsOnly = users.filter(u => u.role === UserRole.STUDENT);
+
+  // เตรียมข้อมูลสำหรับ SearchableSelect
+  const studentOptions = [
+      { label: '🏛️ ส่วนกลาง (ยอดเงินรวม)', value: 'GENERAL' },
+      ...studentsOnly.map(s => ({ label: s.name, value: s._id }))
+  ];
 
   // คำนวณยอดรวม
   useEffect(() => {
@@ -164,8 +273,6 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
         return;
     }
 
-    // ✅ แก้ไข: เช็คสลิปเฉพาะกรณีเป็น "นักเรียน" (isStudent) เท่านั้น
-    // ถ้าเป็น Admin จะข้ามบรรทัดนี้ไปเลย ทำให้กดบันทึกได้แม้ไม่มีรูป
     if (isStudent && type === TransactionType.DEPOSIT && !slipImage) {
         setError('กรุณาแนบสลิป/หลักฐานการโอนเงินที่ถูกต้อง');
         return;
@@ -185,7 +292,6 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
     const finalPeriod1 = isAdmin ? (period1 || undefined) : "รอตรวจสอบ";
 
-    // เตรียม Object ข้อมูล (slipImage ส่งไปเป็น undefined ได้ ถ้าไม่มี)
     const tx1: any = { 
       classroomId: classroom.id,
       type,
@@ -196,7 +302,7 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
       period: finalPeriod1,
       date: new Date().toISOString(),
       status: isAdmin ? TransactionStatus.APPROVED : TransactionStatus.PENDING,
-      slipImage, // ✅ ถ้าไม่มีรูป ค่านี้จะเป็น undefined
+      slipImage, 
       slipHash,
       approver: isAdmin ? currentUserName : undefined
     };
@@ -275,11 +381,14 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                <div className="space-y-1">
                 <label className="block text-xs font-bold text-gray-400 uppercase ml-1">ผู้ทำรายการ</label>
                 {isAdmin ? (
-                  <select required disabled={isSaving} className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-white" value={targetUserId || ''} onChange={(e) => handleStudentSelect(e.target.value)}>
-                    <option value="">-- เลือกชื่อนักเรียน --</option>
-                    <option value="GENERAL">ส่วนกลาง (ยอดเงินรวม)</option>
-                    {studentsOnly.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                  </select>
+                  /* ✅ เปลี่ยนตรงนี้: ใช้ SearchableSelect แทน select เดิม */
+                  <SearchableSelect 
+                    options={studentOptions}
+                    value={targetUserId || ''}
+                    onChange={handleStudentSelect}
+                    placeholder="-- พิมพ์ชื่อเพื่อค้นหา --"
+                    disabled={isSaving}
+                  />
                 ) : (
                   <input disabled type="text" value={studentName} className="w-full px-4 py-2 border border-gray-200 rounded-xl bg-gray-50 text-gray-600" />
                 )}
@@ -287,7 +396,6 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
 
               {/* --- สลิป --- */}
               <div className="space-y-1">
-                {/* ✅ แก้ไข: เพิ่มคำว่า (ถ้ามี) สำหรับ Admin */}
                 <label className="block text-xs font-bold text-gray-400 uppercase ml-1">
                     หลักฐาน/สลิป {isAdmin && <span className="font-normal text-gray-400">(ถ้ามี)</span>}
                 </label>
@@ -423,7 +531,6 @@ const TransactionForm: React.FC<Props> = ({ classroom, userRole, currentUserId, 
                  <div className="text-xs text-gray-500 mt-2 pt-2 border-t">
                     <span className="font-bold">หมายเหตุ:</span> {note}
                  </div>
-                 {/* แสดงสถานะสลิปในหน้ายืนยัน */}
                  <div className="text-xs text-gray-400 mt-1">
                     <span className="font-bold">สลิป:</span> {slipImage ? 'แนบแล้ว' : 'ไม่ได้แนบ'}
                  </div>

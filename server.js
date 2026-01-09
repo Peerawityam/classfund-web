@@ -71,6 +71,7 @@ const ClassroomSchema = new mongoose.Schema({
   announcementDate: { type: Date, default: Date.now },
   monthlyFee: { type: Number, default: 20 },
   activePeriods: [String],
+  closedPeriods: { type: [String], default: [] },
   periodAmounts: { type: Map, of: Number },
   paymentQrCode: String,
   isPaymentActive: { type: Boolean, default: true },

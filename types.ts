@@ -46,7 +46,8 @@ export interface Classroom {
   targetAmount?: number;
   createdAt?: string;
   monthlyFee?: number;
-  activePeriods?: string[];
+  activePeriods?: string[]
+  closedPeriods?: string[]; 
   periodAmounts?: { [key: string]: number }; // จุดสำคัญ
   paymentQrCode?: string;
   announcement?: string;
