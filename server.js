@@ -3,12 +3,44 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import { v2 as cloudinary } from 'cloudinary'; 
+import { v2 as cloudinary } from 'cloudinary';
+import bcrypt from 'bcrypt';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import winston from 'winston';
 
+
+// --- Logger Setup ---
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.simple()
+    })
+  ]
+});
+
+// --- Rate Limiting ---
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // stricter limit for sensitive endpoints
+  message: 'Too many attempts, please try again later.'
+});
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
+app.use('/api/', limiter); // Apply rate limiting to all API routes
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -39,24 +71,23 @@ mongoose.connect(MONGODB_URI)
 
 // --- Schemas ---
 const UserSchema = new mongoose.Schema({
-  _id: { type: String }, 
-  username: { type: String, required: true, unique: true },
+  _id: { type: String },
+  username: { type: String, required: true, unique: true, index: true },
   password: { type: String, required: true },
   name: { type: String, required: true },
   role: { type: String, enum: ['ADMIN', 'STUDENT'], default: 'STUDENT' },
   classroomId: { type: String, default: 'MAIN' },
-
-  lineUserId: { type: String, default: null }
+  lineUserId: { type: String, default: null, index: true }
 }, { timestamps: true });
 
 const TransactionSchema = new mongoose.Schema({
   classroomId: { type: String, default: 'MAIN' },
-  userId: String,
+  userId: { type: String, index: true },
   studentName: String,
   amount: Number,
   type: { type: String, enum: ['DEPOSIT', 'EXPENSE'] },
-  status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING' },
-  date: { type: Date, default: Date.now },
+  status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING', index: true },
+  date: { type: Date, default: Date.now, index: true },
   note: String,
   period: String,
   approver: String,
@@ -81,7 +112,49 @@ const User = mongoose.model('User', UserSchema);
 const Transaction = mongoose.model('Transaction', TransactionSchema);
 const Classroom = mongoose.model('Classroom', ClassroomSchema);
 
+// --- Validation Schemas ---
+const TransactionValidation = z.object({
+  userId: z.string().optional(),
+  studentName: z.string().min(1, 'Student name is required'),
+  amount: z.number().positive('Amount must be positive'),
+  type: z.enum(['DEPOSIT', 'EXPENSE']),
+  note: z.string().max(500, 'Note too long').optional(),
+  period: z.string().optional(),
+  slipImage: z.string().optional(),
+  slipHash: z.string().optional()
+});
+
+const UserValidation = z.object({
+  username: z.string().min(3, 'Username must be at least 3 characters'),
+  password: z.string().min(4, 'Password must be at least 4 characters'),
+  name: z.string().min(1, 'Name is required'),
+  role: z.enum(['ADMIN', 'STUDENT']).optional()
+});
+
+// --- Middleware ---
+const validateRequest = (schema) => (req, res, next) => {
+  try {
+    schema.parse(req.body);
+    next();
+  } catch (error) {
+    logger.error('Validation error:', error);
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: error.errors
+    });
+  }
+};
+
 // --- API Routes ---
+
+// Health Check Endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
 app.get('/api/init-classroom', async (req, res) => {
   try {
     let classroom = await Classroom.findOne({ id: 'MAIN' });
@@ -91,7 +164,8 @@ app.get('/api/init-classroom', async (req, res) => {
     }
     const adminExists = await User.findOne({ username: 'admin' });
     if (!adminExists) {
-      await User.create({ _id: 'admin', username: 'admin', password: '00189', name: 'ผู้ดูแลระบบ', role: 'ADMIN' });
+      const hashedPassword = await bcrypt.hash('00189', 10);
+      await User.create({ _id: 'admin', username: 'admin', password: hashedPassword, name: 'ผู้ดูแลระบบ', role: 'ADMIN' });
     }
     res.json(classroom);
   } catch (err) {
@@ -103,8 +177,8 @@ app.patch('/api/classroom', async (req, res) => {
   try {
     console.log("📥 Received Update:", req.body);
     if (req.body.paymentQrCode && req.body.paymentQrCode.startsWith('data:image')) {
-        const uploadRes = await cloudinary.uploader.upload(req.body.paymentQrCode, { folder: 'classfund_settings' });
-        req.body.paymentQrCode = uploadRes.secure_url;
+      const uploadRes = await cloudinary.uploader.upload(req.body.paymentQrCode, { folder: 'classfund_settings' });
+      req.body.paymentQrCode = uploadRes.secure_url;
     }
     const updated = await Classroom.findOneAndUpdate({ id: 'MAIN' }, req.body, { new: true });
 
@@ -120,11 +194,11 @@ app.put('/api/classroom/announcement', async (req, res) => {
   const { classroomId, text } = req.body;
   try {
     const updated = await Classroom.findByIdAndUpdate(
-      classroomId, 
-      { 
-        announcement: text, 
-        announcementDate: new Date() 
-      }, 
+      classroomId,
+      {
+        announcement: text,
+        announcementDate: new Date()
+      },
       { new: true }
     );
     res.json(updated);
@@ -133,13 +207,27 @@ app.put('/api/classroom/announcement', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', strictLimiter, async (req, res) => {
   const { username, password } = req.body;
   try {
-    const user = await User.findOne({ username, password });
-    if (user) res.json(user);
-    else res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+    if (!username || !password) {
+      return res.status(400).json({ message: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
+    }
+
+    logger.info(`User logged in: ${username}`);
+    res.json(user);
   } catch (err) {
+    logger.error('Login error:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -153,13 +241,28 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-app.post('/api/users', async (req, res) => {
+app.post('/api/users', validateRequest(UserValidation), async (req, res) => {
   try {
-    const userData = { ...req.body, _id: req.body.username };
+    const { username, password, name, role } = req.body;
+
+    // Hash password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const userData = {
+      _id: username,
+      username,
+      password: hashedPassword,
+      name,
+      role: role || 'STUDENT'
+    };
+
     const user = new User(userData);
     await user.save();
+
+    logger.info(`New user created: ${username}`);
     res.json(user);
   } catch (err) {
+    logger.error('Create user error:', err);
     res.status(400).json({ message: 'ไม่สามารถเพิ่มผู้ใช้ได้ หรือชื่อผู้ใช้นี้มีอยู่แล้ว' });
   }
 });
@@ -207,18 +310,20 @@ app.get('/api/transactions', async (req, res) => {
   }
 });
 
-app.post('/api/transactions', async (req, res) => {
+app.post('/api/transactions', validateRequest(TransactionValidation), async (req, res) => {
   try {
     let transactionData = { ...req.body };
     if (transactionData.slipImage && transactionData.slipImage.startsWith('data:image')) {
-        if (!isCloudinaryConfigured()) throw new Error('Cloudinary is not configured');
-        const uploadRes = await cloudinary.uploader.upload(transactionData.slipImage, { folder: 'classfund_slips' });
-        transactionData.slipImage = uploadRes.secure_url;
+      if (!isCloudinaryConfigured()) throw new Error('Cloudinary is not configured');
+      const uploadRes = await cloudinary.uploader.upload(transactionData.slipImage, { folder: 'classfund_slips' });
+      transactionData.slipImage = uploadRes.secure_url;
     }
     const tx = new Transaction(transactionData);
     await tx.save();
+    logger.info(`Transaction created: ${tx._id}`);
     res.json(tx);
   } catch (err) {
+    logger.error('Transaction creation error:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -242,11 +347,16 @@ app.patch('/api/transactions/:id', async (req, res) => {
   }
 });
 
-app.post('/api/broadcast', async (req, res) => {
+app.post('/api/broadcast', strictLimiter, async (req, res) => {
   const { message } = req.body;
-  
-  // 👇 เอา Access Token ยาวๆ จากขั้นตอนที่ 1 มาใส่ตรงนี้
-  const CHANNEL_ACCESS_TOKEN = 'fRTCRXwI40rKvkfowfXcas8MZeppFeyGQN0rGr2ECTEbamySVH6GaIpfVoOVF7cjz1eXKPTMO0HRj/4hFw77zPrlPpyim7FlI5qenlHmH+X+fcyVSQfN6W2aqc7U0arA+ppt66hDE3gN9TZPVB0fpQdB04t89/1O/w1cDnyilFU='; 
+
+  // Get LINE Channel Access Token from environment variable
+  const CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+  if (!CHANNEL_ACCESS_TOKEN) {
+    logger.error('LINE_CHANNEL_ACCESS_TOKEN not configured');
+    return res.status(500).json({ success: false, message: 'LINE integration not configured' });
+  }
 
   try {
     const users = await User.find({ lineUserId: { $ne: null } });
