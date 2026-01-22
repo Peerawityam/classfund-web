@@ -47,6 +47,11 @@
     "**/*.ts",
     "**/*.tsx"
   ],
+  "exclude": [ // <--- เพิ่มส่วนนี้ครับ
+    "node_modules",
+    "vite.config.ts",
+    "dist"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"
