@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, ScanLine, LogOut, BarChart3, User, Settings, FileText, UserCircle, Cog, ScrollText } from 'lucide-react';
+import { Home, ScanLine, LogOut, BarChart3, User, Settings, UserCircle, Cog, ScrollText } from 'lucide-react';
 import ThemeToggle from './ui/ThemeToggle';
 
 interface NavigationProps {

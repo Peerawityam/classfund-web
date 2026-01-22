@@ -1,6 +1,6 @@
 
 /// <reference types="vite/client" />
-import { Classroom, Transaction, TransactionStatus, User, UserRole, TransactionType } from '../types';
+import { Classroom, Transaction, TransactionStatus, User, UserRole } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
@@ -178,7 +178,6 @@ export const calculateBalance = (
       const amount = Math.abs(Number(curr.amount) || 0);
 
       // 5. จัดการประเภท
-      const originalType = curr.type; // เก็บค่าเดิมไว้ดู log
       const typeStr = String(curr.type || '').trim().toUpperCase();
 
       // 6. กำหนดหมวดหมู่

@@ -157,7 +157,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
   // Payment Form State
   const [payAmount, setPayAmount] = useState<string>("");
-  const [payPeriod, setPayPeriod] = useState<string>("");
   const [paySlip, setPaySlip] = useState<string | null>(null);
   const [paySlipHash, setPaySlipHash] = useState<string>("");
   const [payNote, setPayNote] = useState("");
@@ -168,7 +167,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
   // AI & Upload State
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [aiMessage, setAiMessage] = useState("");
   const [aiStatus, setAiStatus] = useState<"idle" | "success" | "error">(
     "idle"
@@ -181,7 +179,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
   const [showQrScanner, setShowQrScanner] = useState(false);
 
   const qrInputRef = useRef<HTMLInputElement>(null);
-  const slipInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user.role === UserRole.ADMIN;
   const periods = currentClassroom.activePeriods || [];
@@ -312,17 +309,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     await refreshData();
   };
 
-  const handleRemovePeriod = async (pName: string) => {
-    if (!confirm(`ลบรอบ "${pName}"?`)) return;
-    const newAmts = { ...currentClassroom.periodAmounts };
-    delete newAmts[pName];
-    await api.updateClassroom({
-      ...currentClassroom,
-      activePeriods: periods.filter((p) => p !== pName),
-      periodAmounts: newAmts,
-    });
-    await refreshData();
-  };
+
 
   // ✅ ฟังก์ชัน 1: ปิดรอบ (ย้ายจาก Active -> Closed)
   const handleArchivePeriod = async (pName: string) => {
@@ -457,7 +444,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       }
 
       setIsAnalyzing(true);
-      setUploadProgress(10);
       setAiMessage("กำลังอัปโหลดรูป...");
       setAiStatus("idle");
       setPaySlip(null);
@@ -486,7 +472,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           if (!cloudinaryUrl) throw new Error("อัปโหลดรูปไม่สำเร็จ");
 
           setPaySlip(cloudinaryUrl);
-          setUploadProgress(100);
           setAiMessage("กำลังตรวจสอบยอดเงิน...");
 
           try {
@@ -516,7 +501,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           setPaySlip(null);
         } finally {
           setIsAnalyzing(false);
-          setUploadProgress(0);
         }
       };
       reader.readAsDataURL(file);
@@ -577,7 +561,6 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
       );
 
       setPayAmount("");
-      setPayPeriod("");
       setPaySlip(null);
       setPayNote("");
       setAiMessage("");

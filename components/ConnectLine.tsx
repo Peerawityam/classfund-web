@@ -1,9 +1,9 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import liff from '@line/liff';
 
 const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
-  const [status, setStatus] = useState("idle"); 
+  const [status, setStatus] = useState("idle");
 
   // ⚠️ ใส่ LIFF ID ของคุณตรงนี้
   const LIFF_ID = "2008777068-WJ83pSqD"; // <-- ตรวจสอบว่าใส่รหัสถูกต้องหรือยัง
@@ -13,20 +13,20 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
   const saveDataToBackend = async (lineUserId: string) => {
     try {
       console.log("กำลังบันทึก LINE ID:", lineUserId);
-      
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: currentUser.username, 
-          lineUserId: lineUserId          
+          username: currentUser.username,
+          lineUserId: lineUserId
         })
       });
 
       if (response.ok) {
         setStatus("success");
         alert("✅ เชื่อมต่อ LINE สำเร็จ!");
-        if (onLinkSuccess) onLinkSuccess(); 
+        if (onLinkSuccess) onLinkSuccess();
       } else {
         const errData = await response.json();
         console.error("Save Error:", errData);
@@ -46,8 +46,8 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
       await liff.init({ liffId: LIFF_ID });
 
       if (!liff.isLoggedIn()) {
-        liff.login(); 
-        return; 
+        liff.login();
+        return;
       }
 
       // ถ้าล็อกอินแล้ว ดึง ID มาบันทึกเลย
@@ -68,18 +68,18 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
         await liff.init({ liffId: LIFF_ID });
         // ถ้ากลับมาจากการล็อกอินแล้ว ให้บันทึกเลย ไม่ต้องรอกดปุ่ม
         if (liff.isLoggedIn()) {
-           setStatus("loading");
-           const profile = await liff.getProfile();
-           await saveDataToBackend(profile.userId);
+          setStatus("loading");
+          const profile = await liff.getProfile();
+          await saveDataToBackend(profile.userId);
         }
       } catch (e) {
         console.error(e);
       }
     };
-    autoCheck(); 
+    autoCheck();
   }, []);
 
-  if (status === "success") return null; 
+  if (status === "success") return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 font-sarabun">
@@ -95,19 +95,19 @@ const ConnectLine = ({ currentUser, onLinkSuccess }: any) => {
           className="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all"
         >
           {status === "loading" ? (
-             <span>⏳ กำลังบันทึกข้อมูล...</span>
+            <span>⏳ กำลังบันทึกข้อมูล...</span>
           ) : (
-             <>
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                  <path d="M22 10.4c0-5.2-4.8-9.4-10.7-9.4S.6 5.2.6 10.4c0 4.6 3.7 8.5 8.9 9.2.4.1.9.3.7.8-.1.3-.2.8-.4 1.4-.2.8-.8 2.2 1.9.6l5.3-4.5c2.9-.4 5-2.6 5-5.5z"/>
-                </svg>
-                เชื่อมต่อ LINE ทันที
-             </>
+            <>
+              <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                <path d="M22 10.4c0-5.2-4.8-9.4-10.7-9.4S.6 5.2.6 10.4c0 4.6 3.7 8.5 8.9 9.2.4.1.9.3.7.8-.1.3-.2.8-.4 1.4-.2.8-.8 2.2 1.9.6l5.3-4.5c2.9-.4 5-2.6 5-5.5z" />
+              </svg>
+              เชื่อมต่อ LINE ทันที
+            </>
           )}
         </button>
 
-        <button 
-          onClick={() => setStatus("success")} 
+        <button
+          onClick={() => setStatus("success")}
           className="mt-4 text-gray-400 text-sm hover:text-gray-600 underline"
         >
         </button>

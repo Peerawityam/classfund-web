@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Transaction, TransactionStatus, TransactionType } from '../../types';
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, subMonths } from 'date-fns';
 import { th } from 'date-fns/locale';

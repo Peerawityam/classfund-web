@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Customization } from '../types';
 import * as api from '../services/apiService';
 import { Palette, Type, ImageIcon, Save, RotateCcw, Upload, Sparkles } from 'lucide-react';
 
@@ -10,7 +9,6 @@ interface Props {
 }
 
 const Settings: React.FC<Props> = ({ classroomId, userId, onUpdate }) => {
-    const [customization, setCustomization] = useState<Customization | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -39,7 +37,6 @@ const Settings: React.FC<Props> = ({ classroomId, userId, onUpdate }) => {
         setLoading(true);
         try {
             const data = await api.getCustomization(classroomId);
-            setCustomization(data);
             setPrimaryColor(data.theme?.primaryColor || '#3b82f6');
             setSecondaryColor(data.theme?.secondaryColor || '#8b5cf6');
             setFontFamily(data.theme?.fontFamily || 'Inter');

@@ -167,7 +167,10 @@ const UserProfile: React.FC<Props> = ({ user, transactions, onUpdate }) => {
     const levelInfo = getLevelInfo(stats.level);
     const badges = getBadges();
     const currentXp = stats.totalPaid * 10;
-    const progress = ((currentXp % levelInfo.nextXp) / levelInfo.nextXp) * 100;
+
+    // แก้ไข: เพิ่ม ? และค่า fallback เพื่อป้องกัน Error
+    const nextXp = levelInfo?.nextXp || 1000;
+    const progress = ((currentXp % nextXp) / nextXp) * 100;
 
     return (
         <div className="p-3 sm:p-6 max-w-4xl mx-auto pb-24 md:pb-8">
@@ -216,17 +219,17 @@ const UserProfile: React.FC<Props> = ({ user, transactions, onUpdate }) => {
                         {/* Level Progress */}
                         <div className="mb-4">
                             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                                <span className={`px-3 py-1 rounded-full text-white text-xs sm:text-sm font-medium ${levelInfo.color} flex items-center gap-1.5 shadow-sm`}>
-                                    {levelInfo.icon}
-                                    <span>Level {stats.level} - {levelInfo.title}</span>
+                                <span className={`px-3 py-1 rounded-full text-white text-xs sm:text-sm font-medium ${levelInfo?.color || 'bg-gray-400'} flex items-center gap-1.5 shadow-sm`}>
+                                    {levelInfo?.icon}
+                                    <span>Level {stats.level} - {levelInfo?.title}</span>
                                 </span>
                                 <span className="text-xs sm:text-sm text-gray-600 font-medium">
-                                    {currentXp} / {levelInfo.nextXp} XP
+                                    {currentXp} / {nextXp} XP
                                 </span>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-2.5 sm:h-3 overflow-hidden shadow-inner">
                                 <div
-                                    className={`h-full ${levelInfo.color} transition-all duration-500`}
+                                    className={`h-full ${levelInfo?.color || 'bg-gray-400'} transition-all duration-500`}
                                     style={{ width: `${progress}%` }}
                                 />
                             </div>
@@ -321,7 +324,7 @@ const UserProfile: React.FC<Props> = ({ user, transactions, onUpdate }) => {
                         <Trophy size={20} className="sm:w-6 sm:h-6" />
                     </div>
                     <p className="text-2xl sm:text-3xl font-bold">{stats.level}</p>
-                    <p className="text-xs sm:text-sm opacity-75">{levelInfo.title}</p>
+                    <p className="text-xs sm:text-sm opacity-75">{levelInfo?.title}</p>
                 </div>
             </div>
 
