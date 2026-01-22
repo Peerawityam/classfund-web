@@ -108,9 +108,49 @@ const ClassroomSchema = new mongoose.Schema({
   isPaymentActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
+const AuditLogSchema = new mongoose.Schema({
+  userId: { type: String, required: true, index: true },
+  username: { type: String, required: true },
+  action: { type: String, required: true, index: true },
+  targetType: { type: String, enum: ['USER', 'TRANSACTION', 'CLASSROOM', 'SETTINGS'], index: true },
+  targetId: { type: String },
+  details: { type: String, required: true },
+  ipAddress: { type: String },
+  timestamp: { type: Date, default: Date.now, index: true }
+}, { timestamps: true });
+
+const CustomizationSchema = new mongoose.Schema({
+  classroomId: { type: String, required: true, unique: true },
+  theme: {
+    primaryColor: { type: String, default: '#3b82f6' },
+    secondaryColor: { type: String, default: '#8b5cf6' },
+    fontFamily: { type: String, default: 'Inter' }
+  },
+  logo: { type: String },
+  customName: { type: String },
+  updatedBy: { type: String },
+  updatedAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
+const UserProfileSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true, index: true },
+  profilePicture: { type: String },
+  bio: { type: String, maxlength: 200 },
+  achievements: { type: [String], default: [] },
+  statistics: {
+    totalPaid: { type: Number, default: 0 },
+    transactionCount: { type: Number, default: 0 },
+    level: { type: Number, default: 1 }
+  },
+  updatedAt: { type: Date, default: Date.now }
+}, { timestamps: true });
+
 const User = mongoose.model('User', UserSchema);
 const Transaction = mongoose.model('Transaction', TransactionSchema);
 const Classroom = mongoose.model('Classroom', ClassroomSchema);
+const AuditLog = mongoose.model('AuditLog', AuditLogSchema);
+const Customization = mongoose.model('Customization', CustomizationSchema);
+const UserProfile = mongoose.model('UserProfile', UserProfileSchema);
 
 // --- Validation Schemas ---
 const TransactionValidation = z.object({
@@ -142,6 +182,26 @@ const validateRequest = (schema) => (req, res, next) => {
       message: 'Validation failed',
       errors: error.errors
     });
+  }
+};
+
+// --- Audit Logging Helper ---
+const logAudit = async (userId, username, action, targetType, targetId, details, ipAddress = null) => {
+  try {
+    const auditLog = new AuditLog({
+      userId,
+      username,
+      action,
+      targetType,
+      targetId,
+      details,
+      ipAddress,
+      timestamp: new Date()
+    });
+    await auditLog.save();
+    logger.info(`Audit: ${username} - ${action} - ${details}`);
+  } catch (error) {
+    logger.error('Failed to create audit log:', error);
   }
 };
 
@@ -224,6 +284,17 @@ app.post('/api/login', strictLimiter, async (req, res) => {
       return res.status(401).json({ message: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
     }
 
+    // Log successful login
+    await logAudit(
+      user._id,
+      user.username,
+      'LOGIN',
+      'USER',
+      user._id,
+      `User ${user.username} logged in successfully`,
+      req.ip
+    );
+
     logger.info(`User logged in: ${username}`);
     res.json(user);
   } catch (err) {
@@ -258,6 +329,17 @@ app.post('/api/users', validateRequest(UserValidation), async (req, res) => {
 
     const user = new User(userData);
     await user.save();
+
+    // Log user creation
+    await logAudit(
+      'system',
+      'system',
+      'CREATE_USER',
+      'USER',
+      user._id,
+      `New user created: ${username} (${role || 'STUDENT'})`,
+      null
+    );
 
     logger.info(`New user created: ${username}`);
     res.json(user);
@@ -294,6 +376,18 @@ app.post('/api/update-line-id', async (req, res) => {
 
 app.delete('/api/users/:id', async (req, res) => {
   try {
+    const user = await User.findById(req.params.id);
+    if (user) {
+      await logAudit(
+        'admin',
+        'admin',
+        'DELETE_USER',
+        'USER',
+        user._id,
+        `User deleted: ${user.username} (${user.name})`,
+        null
+      );
+    }
     await User.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {
@@ -340,7 +434,24 @@ app.get('/api/transactions/check-slip/:hash', async (req, res) => {
 
 app.patch('/api/transactions/:id', async (req, res) => {
   try {
+    const oldTx = await Transaction.findById(req.params.id);
     const tx = await Transaction.findByIdAndUpdate(req.params.id, req.body, { new: true });
+
+    // Log transaction status changes
+    if (oldTx && req.body.status && oldTx.status !== req.body.status) {
+      const action = req.body.status === 'APPROVED' ? 'APPROVE_TRANSACTION' :
+        req.body.status === 'REJECTED' ? 'REJECT_TRANSACTION' : 'UPDATE_TRANSACTION';
+      await logAudit(
+        req.body.approver || 'system',
+        req.body.approver || 'system',
+        action,
+        'TRANSACTION',
+        tx._id,
+        `Transaction ${action.toLowerCase().replace('_', ' ')}: ${tx.studentName} - ${tx.amount} บาท`,
+        null
+      );
+    }
+
     res.json(tx);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -390,6 +501,154 @@ app.post('/api/broadcast', strictLimiter, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// --- Audit Log Endpoints ---
+app.get('/api/audit-logs', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, userId, action, targetType, startDate, endDate, search } = req.query;
+
+    const query = {};
+    if (userId) query.userId = userId;
+    if (action) query.action = action;
+    if (targetType) query.targetType = targetType;
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+    if (search) {
+      query.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { details: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const total = await AuditLog.countDocuments(query);
+    const logs = await AuditLog.find(query)
+      .sort({ timestamp: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.json({
+      logs,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (err) {
+    logger.error('Get audit logs error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- Customization Endpoints ---
+app.get('/api/customization/:classroomId', async (req, res) => {
+  try {
+    let customization = await Customization.findOne({ classroomId: req.params.classroomId });
+    if (!customization) {
+      // Create default customization if not exists
+      customization = new Customization({ classroomId: req.params.classroomId });
+      await customization.save();
+    }
+    res.json(customization);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.patch('/api/customization/:classroomId', async (req, res) => {
+  try {
+    const { theme, logo, customName, updatedBy } = req.body;
+
+    // Upload logo to Cloudinary if it's a base64 image
+    let logoUrl = logo;
+    if (logo && logo.startsWith('data:image')) {
+      if (!isCloudinaryConfigured()) throw new Error('Cloudinary is not configured');
+      const uploadRes = await cloudinary.uploader.upload(logo, { folder: 'classfund_customization' });
+      logoUrl = uploadRes.secure_url;
+    }
+
+    const updated = await Customization.findOneAndUpdate(
+      { classroomId: req.params.classroomId },
+      {
+        theme,
+        logo: logoUrl,
+        customName,
+        updatedBy,
+        updatedAt: new Date()
+      },
+      { new: true, upsert: true }
+    );
+
+    // Log the customization change
+    if (updatedBy) {
+      await logAudit(
+        updatedBy,
+        updatedBy,
+        'UPDATE_CUSTOMIZATION',
+        'SETTINGS',
+        req.params.classroomId,
+        `Updated customization settings for classroom ${req.params.classroomId}`
+      );
+    }
+
+    res.json(updated);
+  } catch (err) {
+    logger.error('Update customization error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// --- User Profile Endpoints ---
+app.get('/api/profile/:userId', async (req, res) => {
+  try {
+    let profile = await UserProfile.findOne({ userId: req.params.userId });
+    if (!profile) {
+      // Create default profile if not exists
+      profile = new UserProfile({ userId: req.params.userId });
+      await profile.save();
+    }
+    res.json(profile);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.patch('/api/profile/:userId', async (req, res) => {
+  try {
+    const { profilePicture, bio, achievements, statistics } = req.body;
+
+    // Upload profile picture to Cloudinary if it's a base64 image
+    let pictureUrl = profilePicture;
+    if (profilePicture && profilePicture.startsWith('data:image')) {
+      if (!isCloudinaryConfigured()) throw new Error('Cloudinary is not configured');
+      const uploadRes = await cloudinary.uploader.upload(profilePicture, {
+        folder: 'classfund_profiles',
+        transformation: [
+          { width: 400, height: 400, crop: 'fill', gravity: 'face' }
+        ]
+      });
+      pictureUrl = uploadRes.secure_url;
+    }
+
+    const updated = await UserProfile.findOneAndUpdate(
+      { userId: req.params.userId },
+      {
+        profilePicture: pictureUrl,
+        bio,
+        achievements,
+        statistics,
+        updatedAt: new Date()
+      },
+      { new: true, upsert: true }
+    );
+
+    res.json(updated);
+  } catch (err) {
+    logger.error('Update profile error:', err);
+    res.status(500).json({ message: err.message });
   }
 });
 

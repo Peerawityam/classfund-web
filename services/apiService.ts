@@ -15,8 +15,8 @@ const localStore = {
 };
 
 async function request<T>(
-  path: string, 
-  options: RequestInit, 
+  path: string,
+  options: RequestInit,
   fallbackAction: () => T | Promise<T>
 ): Promise<T> {
   try {
@@ -129,8 +129,8 @@ export const checkSlipDuplicate = async (hash: string) => {
   // สมมติว่า base URL คือ http://localhost:3001
   const response = await fetch(`${API_BASE}/transactions/check-slip/${hash}`);
   if (!response.ok) {
-     // ถ้าหลังบ้านยังไม่ทำ API นี้ ให้ return false ไปก่อนเพื่อกัน Error หน้าเว็บ
-     return { isDuplicate: false };
+    // ถ้าหลังบ้านยังไม่ทำ API นี้ ให้ return false ไปก่อนเพื่อกัน Error หน้าเว็บ
+    return { isDuplicate: false };
   }
   return response.json();
 };
@@ -149,8 +149,8 @@ export const updateTransactionStatus = async (id: string, status: TransactionSta
 };
 
 export const calculateBalance = (
-  txs: Transaction[], 
-  userId?: string, 
+  txs: Transaction[],
+  userId?: string,
   mode: 'NET' | 'INCOME' | 'EXPENSE' = 'NET'
 ): number => {
 
@@ -166,23 +166,23 @@ export const calculateBalance = (
       const isApproved = String(t.status || '').toUpperCase() === 'APPROVED';
       return isApproved;
     })
-    
+
     // 3. กรอง User
     .filter(t => {
       const matchUser = !userId || String(t.userId) === String(userId);
       return matchUser;
     })
-    
+
     .reduce((acc, curr) => {
       // 4. แปลงค่าเงิน
       const amount = Math.abs(Number(curr.amount) || 0);
-      
+
       // 5. จัดการประเภท
       const originalType = curr.type; // เก็บค่าเดิมไว้ดู log
       const typeStr = String(curr.type || '').trim().toUpperCase();
 
       // 6. กำหนดหมวดหมู่
-      const incomeTypes = ['DEPOSIT', 'INCOME', '0']; 
+      const incomeTypes = ['DEPOSIT', 'INCOME', '0'];
       const isDeposit = incomeTypes.includes(typeStr);
 
       // 7. คำนวณตาม Mode
@@ -199,7 +199,7 @@ export const calculateBalance = (
       }
     }, 0);
 
-  
+
   return result;
 };
 
@@ -228,5 +228,64 @@ export const updateAnnouncement = async (classroomId: string, text: string) => {
     throw new Error('Failed to update announcement');
   }
 
+  return response.json();
+};
+
+// --- Audit Log API ---
+export const getAuditLogs = async (filters?: {
+  page?: number;
+  limit?: number;
+  userId?: string;
+  action?: string;
+  targetType?: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}) => {
+  const params = new URLSearchParams();
+  if (filters) {
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        params.append(key, String(value));
+      }
+    });
+  }
+
+  const response = await fetch(`${API_BASE}/audit-logs?${params.toString()}`);
+  if (!response.ok) throw new Error('Failed to fetch audit logs');
+  return response.json();
+};
+
+// --- Customization API ---
+export const getCustomization = async (classroomId: string) => {
+  const response = await fetch(`${API_BASE}/customization/${classroomId}`);
+  if (!response.ok) throw new Error('Failed to fetch customization');
+  return response.json();
+};
+
+export const updateCustomization = async (classroomId: string, data: any) => {
+  const response = await fetch(`${API_BASE}/customization/${classroomId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error('Failed to update customization');
+  return response.json();
+};
+
+// --- User Profile API ---
+export const getUserProfile = async (userId: string) => {
+  const response = await fetch(`${API_BASE}/profile/${userId}`);
+  if (!response.ok) throw new Error('Failed to fetch user profile');
+  return response.json();
+};
+
+export const updateUserProfile = async (userId: string, data: any) => {
+  const response = await fetch(`${API_BASE}/profile/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error('Failed to update user profile');
   return response.json();
 };

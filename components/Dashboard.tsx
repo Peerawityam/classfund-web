@@ -16,6 +16,14 @@ import UserManagement from "./UserManagement";
 import ConnectLine from "./ConnectLine";
 import Navigation from "./Navigation";
 import * as XLSX from "xlsx";
+import Statistics from "./Statistics";
+import PaymentChart from "./charts/PaymentChart";
+import ExpenseBreakdown from "./charts/ExpenseBreakdown";
+import TopContributors from "./TopContributors";
+import QrScanner from "./ui/QrScanner";
+import AuditLog from "./AuditLog";
+import Settings from "./Settings";
+import UserProfile from "./UserProfile";
 // ✅ Import ไอคอนครบถ้วน
 import {
   Lock,
@@ -168,6 +176,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
   // Mobile Action Sheet State
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+
+  // QR Scanner State
+  const [showQrScanner, setShowQrScanner] = useState(false);
 
   const qrInputRef = useRef<HTMLInputElement>(null);
   const slipInputRef = useRef<HTMLInputElement>(null);
@@ -930,9 +941,8 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                   placeholder="0.00"
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
-                  className={`w-full mt-1 p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 text-lg font-bold text-emerald-600 placeholder-gray-300 ${
-                    isAnalyzing ? "opacity-50" : ""
-                  }`}
+                  className={`w-full mt-1 p-3 bg-gray-50 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 text-lg font-bold text-emerald-600 placeholder-gray-300 ${isAnalyzing ? "opacity-50" : ""
+                    }`}
                 />
               </div>
 
@@ -946,15 +956,26 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                     </span>
                   )}
                 </label>
+
+                {/* QR Scanner Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowQrScanner(true)}
+                  className="w-full mt-2 mb-2 py-2 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:from-blue-600 hover:to-blue-700 transition-all shadow-md hover:shadow-lg active:scale-95"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                  </svg>
+                  📸 สแกน QR Code ด้วยกล้อง
+                </button>
                 <label
                   className={`mt-1 border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all relative overflow-hidden group
-                        ${
-                          aiStatus === "error"
-                            ? "border-red-400 bg-red-50"
-                            : aiStatus === "success"
-                            ? "border-emerald-400 bg-emerald-50"
-                            : "border-gray-300 hover:border-emerald-400 hover:bg-gray-50"
-                        }
+                        ${aiStatus === "error"
+                      ? "border-red-400 bg-red-50"
+                      : aiStatus === "success"
+                        ? "border-emerald-400 bg-emerald-50"
+                        : "border-gray-300 hover:border-emerald-400 hover:bg-gray-50"
+                    }
                         ${isAnalyzing ? "pointer-events-none opacity-50" : ""}`}
                 >
                   <input
@@ -995,9 +1016,8 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
                 {aiMessage && (
                   <div
-                    className={`mt-2 text-xs flex items-center gap-1 font-bold ${
-                      aiStatus === "error" ? "text-red-600" : "text-emerald-600"
-                    }`}
+                    className={`mt-2 text-xs flex items-center gap-1 font-bold ${aiStatus === "error" ? "text-red-600" : "text-emerald-600"
+                      }`}
                   >
                     {aiStatus === "error" ? (
                       <ShieldAlert size={14} />
@@ -1031,11 +1051,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                         type="button"
                         onClick={() => handleQuickTagClick(p)}
                         className={`px-3 py-1.5 text-[10px] font-bold rounded-full transition-all active:scale-95 border
-                                    ${
-                                      selectedTags.includes(p)
-                                        ? "bg-emerald-500 text-white border-emerald-500 shadow-md transform scale-105"
-                                        : "bg-gray-100 text-gray-500 border-gray-100 hover:bg-emerald-50 hover:text-emerald-600"
-                                    }`}
+                                    ${selectedTags.includes(p)
+                            ? "bg-emerald-500 text-white border-emerald-500 shadow-md transform scale-105"
+                            : "bg-gray-100 text-gray-500 border-gray-100 hover:bg-emerald-50 hover:text-emerald-600"
+                          }`}
                       >
                         {selectedTags.includes(p) ? "✓ " : "+ "}
                         {p}{" "}
@@ -1052,11 +1071,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 disabled={
                   isSubmittingPay || isAnalyzing || aiStatus === "error"
                 }
-                className={`w-full py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 mt-2 ${
-                  isSubmittingPay || isAnalyzing || aiStatus === "error"
-                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    : "bg-emerald-500 hover:bg-emerald-600 text-white"
-                }`}
+                className={`w-full py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 mt-2 ${isSubmittingPay || isAnalyzing || aiStatus === "error"
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-emerald-500 hover:bg-emerald-600 text-white"
+                  }`}
               >
                 {isSubmittingPay ? (
                   "กำลังส่ง..."
@@ -1116,10 +1134,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
           {(isAdmin || currentClassroom.announcement) && (
             <div
               className={`w-full rounded-2xl px-4 py-3 flex items-start gap-3 transition-all
-                ${
-                  currentClassroom.announcement
-                    ? "bg-indigo-50/80 border border-indigo-200 shadow-sm"
-                    : "bg-gray-50 border border-gray-200 text-gray-400"
+                ${currentClassroom.announcement
+                  ? "bg-indigo-50/80 border border-indigo-200 shadow-sm"
+                  : "bg-gray-50 border border-gray-200 text-gray-400"
                 }`}
             >
               {/* ไอคอนลำโพง */}
@@ -1215,11 +1232,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 </h1>
                 {!isAdmin && (
                   <span
-                    className={`px-3 py-1 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1 ${
-                      calculateLevel(
-                        api.calculateBalance(transactions, user._id)
-                      ).color
-                    }`}
+                    className={`px-3 py-1 rounded-full text-[10px] font-bold text-white shadow-sm flex items-center gap-1 ${calculateLevel(
+                      api.calculateBalance(transactions, user._id)
+                    ).color
+                      }`}
                   >
                     <Trophy size={12} /> LV.
                     {
@@ -1282,10 +1298,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                           ))}
                           {api.calculateBalance(transactions, user._id) ===
                             0 && (
-                            <span className="text-[10px] text-gray-300 italic">
-                              ยังไม่มีตราประทับ (เริ่มจ่ายเงินเพื่อสะสม)
-                            </span>
-                          )}
+                              <span className="text-[10px] text-gray-300 italic">
+                                ยังไม่มีตราประทับ (เริ่มจ่ายเงินเพื่อสะสม)
+                              </span>
+                            )}
                         </div>
                       </div>
                     );
@@ -1332,10 +1348,9 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                   )
                 }
                 className={`col-span-2 p-5 rounded-3xl shadow-lg flex items-center justify-between group transition-all relative overflow-hidden
-                  ${
-                    currentClassroom.isPaymentActive
-                      ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-200 cursor-pointer"
-                      : "bg-slate-800 text-slate-400 shadow-slate-300 cursor-pointer"
+                  ${currentClassroom.isPaymentActive
+                    ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-emerald-200 cursor-pointer"
+                    : "bg-slate-800 text-slate-400 shadow-slate-300 cursor-pointer"
                   }`}
               >
                 {!currentClassroom.isPaymentActive && (
@@ -1349,11 +1364,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                       : "SYSTEM OFFLINE"}
                   </p>
                   <p
-                    className={`text-xs ${
-                      currentClassroom.isPaymentActive
-                        ? "text-emerald-100"
-                        : "text-slate-500"
-                    }`}
+                    className={`text-xs ${currentClassroom.isPaymentActive
+                      ? "text-emerald-100"
+                      : "text-slate-500"
+                      }`}
                   >
                     {currentClassroom.isPaymentActive
                       ? "คลิกเพื่อสแกนและแนบสลิป"
@@ -1363,11 +1377,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
                 <div
                   className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl transition-all duration-500
-                   ${
-                     currentClassroom.isPaymentActive
-                       ? "bg-white/20 group-hover:scale-110 group-hover:rotate-12"
-                       : "bg-slate-700/50 group-hover:text-red-500"
-                   }`}
+                   ${currentClassroom.isPaymentActive
+                      ? "bg-white/20 group-hover:scale-110 group-hover:rotate-12"
+                      : "bg-slate-700/50 group-hover:text-red-500"
+                    }`}
                 >
                   {currentClassroom.isPaymentActive ? (
                     <MousePointerClick size={28} />
@@ -1405,18 +1418,16 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 <button
                   onClick={handleTogglePaymentSystem}
                   className={`p-4 rounded-2xl shadow-sm border cursor-pointer transition-all flex flex-col justify-center items-center gap-1 group
-                        ${
-                          currentClassroom.isPaymentActive
-                            ? "bg-white border-emerald-100 hover:border-emerald-300"
-                            : "bg-red-50 border-red-200 hover:bg-red-100"
-                        }`}
+                        ${currentClassroom.isPaymentActive
+                      ? "bg-white border-emerald-100 hover:border-emerald-300"
+                      : "bg-red-50 border-red-200 hover:bg-red-100"
+                    }`}
                 >
                   <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-lg transition-transform group-hover:scale-110 ${
-                      currentClassroom.isPaymentActive
-                        ? "bg-emerald-100 text-emerald-600"
-                        : "bg-red-200 text-red-600"
-                    }`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-lg transition-transform group-hover:scale-110 ${currentClassroom.isPaymentActive
+                      ? "bg-emerald-100 text-emerald-600"
+                      : "bg-red-200 text-red-600"
+                      }`}
                   >
                     {currentClassroom.isPaymentActive ? (
                       <CheckCircle size={18} />
@@ -1425,11 +1436,10 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                     )}
                   </div>
                   <span
-                    className={`text-xs font-bold ${
-                      currentClassroom.isPaymentActive
-                        ? "text-emerald-600"
-                        : "text-red-600"
-                    }`}
+                    className={`text-xs font-bold ${currentClassroom.isPaymentActive
+                      ? "text-emerald-600"
+                      : "text-red-600"
+                      }`}
                   >
                     {currentClassroom.isPaymentActive
                       ? "ระบบเปิดอยู่"
@@ -1481,21 +1491,19 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
                 <>
                   <button
                     onClick={() => setSubTab("PENDING")}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                      subTab === "PENDING"
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                    }`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${subTab === "PENDING"
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                      }`}
                   >
                     รออนุมัติ ({pendingCount})
                   </button>
                   <button
                     onClick={() => setSubTab("MONTHLY")}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                      subTab === "MONTHLY"
-                        ? "bg-indigo-100 text-indigo-700"
-                        : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                    }`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${subTab === "MONTHLY"
+                      ? "bg-indigo-100 text-indigo-700"
+                      : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                      }`}
                   >
                     ตารางจ่ายเงิน
                   </button>
@@ -1503,21 +1511,19 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
               )}
               <button
                 onClick={() => setSubTab("HISTORY")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                  subTab === "HISTORY"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                }`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${subTab === "HISTORY"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                  }`}
               >
                 ประวัติ
               </button>
               <button
                 onClick={() => setSubTab("INDIVIDUAL")}
-                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                  subTab === "INDIVIDUAL"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                }`}
+                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${subTab === "INDIVIDUAL"
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                  }`}
               >
                 รายคน
               </button>
@@ -1699,6 +1705,64 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         </div>
       )}
 
+      {/* --- PAGE: ANALYTICS --- */}
+      {activeMainTab === "analytics" && isAdmin && (
+        <main className="max-w-7xl mx-auto px-4 pt-4 pb-24 md:p-8 space-y-6 animate-fade-in">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                📊 Analytics Dashboard
+              </h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                ภาพรวมและสถิติการเงินของห้องเรียน
+              </p>
+            </div>
+          </div>
+
+          {/* Statistics Cards */}
+          <Statistics
+            transactions={transactions}
+            totalStudents={users.filter(u => u.role === UserRole.STUDENT).length}
+          />
+
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <PaymentChart transactions={transactions} />
+            <ExpenseBreakdown transactions={transactions} />
+          </div>
+
+          {/* Top Contributors */}
+          <TopContributors
+            transactions={transactions}
+            users={users.filter(u => u.role === UserRole.STUDENT)}
+          />
+        </main>
+      )}
+
+      {/* --- PAGE: PROFILE --- */}
+      {activeMainTab === "profile" && (
+        <UserProfile
+          user={user}
+          transactions={transactions}
+          onUpdate={refreshData}
+        />
+      )}
+
+      {/* --- PAGE: SETTINGS --- */}
+      {activeMainTab === "settings" && isAdmin && (
+        <Settings
+          classroomId={currentClassroom.id}
+          userId={user._id}
+          onUpdate={refreshData}
+        />
+      )}
+
+      {/* --- PAGE: AUDIT LOG --- */}
+      {activeMainTab === "audit" && isAdmin && (
+        <AuditLog />
+      )}
+
       {showForm && (
         <TransactionForm
           classroom={currentClassroom}
@@ -1747,6 +1811,23 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
         <ConnectLine
           currentUser={user}
           onLinkSuccess={() => window.location.reload()}
+        />
+      )}
+
+      {/* QR Scanner Modal */}
+      {showQrScanner && (
+        <QrScanner
+          onScanSuccess={(decodedText) => {
+            // Handle scanned QR code data
+            console.log('QR Scanned:', decodedText);
+
+            // You can parse the QR data here if it contains structured information
+            // For now, we'll just show it to the user
+            alert(`✅ สแกน QR Code สำเร็จ!\n\nข้อมูล: ${decodedText}`);
+
+            setShowQrScanner(false);
+          }}
+          onClose={() => setShowQrScanner(false)}
         />
       )}
     </div>

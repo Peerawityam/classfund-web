@@ -47,12 +47,52 @@ export interface Classroom {
   createdAt?: string;
   monthlyFee?: number;
   activePeriods?: string[]
-  closedPeriods?: string[]; 
+  closedPeriods?: string[];
   periodAmounts?: { [key: string]: number }; // จุดสำคัญ
   paymentQrCode?: string;
   announcement?: string;
   announcementDate?: string;
   isPaymentActive?: boolean;
+}
+
+export interface AuditLog {
+  _id: string;
+  userId: string;
+  username: string;
+  action: string;
+  targetType: 'USER' | 'TRANSACTION' | 'CLASSROOM' | 'SETTINGS';
+  targetId?: string;
+  details: string;
+  ipAddress?: string;
+  timestamp: string;
+}
+
+export interface Customization {
+  _id: string;
+  classroomId: string;
+  theme: {
+    primaryColor?: string;
+    secondaryColor?: string;
+    fontFamily?: string;
+  };
+  logo?: string;
+  customName?: string;
+  updatedBy?: string;
+  updatedAt: string;
+}
+
+export interface UserProfile {
+  _id: string;
+  userId: string;
+  profilePicture?: string;
+  bio?: string;
+  achievements: string[];
+  statistics: {
+    totalPaid: number;
+    transactionCount: number;
+    level: number;
+  };
+  updatedAt: string;
 }
 
 export interface AppState {
