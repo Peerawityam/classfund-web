@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Transaction, TransactionStatus, TransactionType } from '../../types';
 
 interface ExpenseBreakdownProps {
@@ -55,7 +55,7 @@ const ExpenseBreakdown: React.FC<ExpenseBreakdownProps> = ({ transactions }) => 
                         fill="#8884d8"
                         dataKey="value"
                     >
-                        {expenseData.map((entry, index) => (
+                        {expenseData.map((_entry: any, index: number) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                     </Pie>

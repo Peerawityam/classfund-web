@@ -336,7 +336,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
     const updated = {
       ...currentClassroom,
       // เอาออกจาก Active
-      activePeriods: currentClassroom.activePeriods.filter((p) => p !== pName),
+      activePeriods: (currentClassroom.activePeriods ?? []).filter((p) => p !== pName),
       // ย้ายไปใส่ Closed (ต่อท้ายอันเดิม)
       closedPeriods: [...(currentClassroom.closedPeriods || []), pName],
     };
@@ -356,7 +356,7 @@ const Dashboard: React.FC<Props> = ({ classroom, user, onLogout }) => {
 
     const updated = {
       ...currentClassroom,
-      activePeriods: [...currentClassroom.activePeriods, pName],
+      activePeriods: [...(currentClassroom.activePeriods ?? []), pName],
       closedPeriods: (currentClassroom.closedPeriods || []).filter(
         (p) => p !== pName
       ),
